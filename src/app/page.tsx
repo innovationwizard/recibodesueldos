@@ -21,7 +21,7 @@ export default async function HomePage() {
             Recibos de Sueldos
           </h1>
           <p className="mt-1 text-[13px] text-white/70">
-            Generador de boletas de pago desde planillas Excel
+            Generador de boletas de pago desde Excel
           </p>
         </div>
       </header>
@@ -32,7 +32,7 @@ export default async function HomePage() {
             Inicia sesión para continuar
           </h2>
           <p className="mt-1 text-sm text-gray-600">
-            Carga tu planilla Excel y genera constancias de pago en segundos
+            Carga tu planilla Excel y genera constancias de pago
           </p>
         </div>
 
@@ -41,8 +41,7 @@ export default async function HomePage() {
         </div>
 
         <p className="mt-8 text-center text-xs text-gray-500">
-          Formato compatible con planillas de Guatemala (IGSS, ISR, Bonificación
-          Decreto 78-89)
+          Formato diseñado a la medida.
         </p>
       </main>
     </div>
