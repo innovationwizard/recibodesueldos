@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { Logo } from "@/components/Logo";
 import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/AuthForm";
 
@@ -17,11 +18,8 @@ export default async function LoginPage() {
     <div className="flex min-h-screen flex-col bg-gray-50">
       <header className="bg-primary px-6 py-6">
         <div className="mx-auto max-w-3xl">
-          <Link
-            href="/"
-            className="text-xl font-bold tracking-tight text-white hover:underline"
-          >
-            Recibos de Sueldos
+          <Link href="/" className="block text-white hover:opacity-90 transition-opacity">
+            <Logo iconSize={28} />
           </Link>
         </div>
       </header>

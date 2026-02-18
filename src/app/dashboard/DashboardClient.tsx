@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback } from "react";
+import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
+import { Logo } from "@/components/Logo";
 import { createClient } from "@/lib/supabase/client";
 import { ReceiptGenerator } from "@/components/ReceiptGenerator";
 import type { ReceiptData } from "@/lib/excel-parser";
@@ -88,9 +90,9 @@ export function DashboardClient({ user }: DashboardClientProps) {
       <header className="bg-primary px-6 py-6">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-white">
-              Generador de Boletas de Pago
-            </h1>
+            <Link href="/" className="block text-white hover:opacity-90 transition-opacity w-fit">
+              <Logo className="text-white" iconSize={24} />
+            </Link>
             <p className="mt-1 text-[13px] text-white/70">
               Cargue planilla Excel → Genere boletas → Imprima PDF
             </p>

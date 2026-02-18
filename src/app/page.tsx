@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { Logo } from "@/components/Logo";
 import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/AuthForm";
 
@@ -17,9 +17,7 @@ export default async function HomePage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-primary px-6 py-6">
         <div className="mx-auto max-w-3xl">
-          <h1 className="text-xl font-bold tracking-tight text-white">
-            Recibos de Sueldos
-          </h1>
+          <Logo className="text-white" iconSize={28} />
           <p className="mt-1 text-[13px] text-white/70">
             Generador de boletas de pago desde Excel
           </p>

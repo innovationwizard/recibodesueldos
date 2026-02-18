@@ -1,16 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
-type Mode = "login" | "signup";
+// type Mode = "login" | "signup";
 
 export function AuthForm() {
-  const [mode, setMode] = useState<Mode>("login");
+  // const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
+  // const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -22,22 +21,22 @@ export function AuthForm() {
     setMessage(null);
 
     try {
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { full_name: fullName } },
-        });
-        if (error) throw error;
-        setMessage({
-          type: "success",
-          text: "¡Cuenta creada! Revisa tu correo para confirmar.",
-        });
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        window.location.href = "/dashboard";
-      }
+      // if (mode === "signup") {
+      //   const { error } = await supabase.auth.signUp({
+      //     email,
+      //     password,
+      //     options: { data: { full_name: fullName } },
+      //   });
+      //   if (error) throw error;
+      //   setMessage({
+      //     type: "success",
+      //     text: "¡Cuenta creada! Revisa tu correo para confirmar.",
+      //   });
+      // } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      window.location.href = "/dashboard";
+      // }
     } catch (err) {
       setMessage({
         type: "error",
@@ -55,15 +54,17 @@ export function AuthForm() {
         className="rounded-xl border border-gray-100 bg-white p-8 shadow-sm"
       >
         <h1 className="mb-2 text-xl font-bold text-primary">
-          {mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
+          Iniciar sesión
+          {/* {mode === "login" ? "Iniciar sesión" : "Crear cuenta"} */}
         </h1>
         <p className="mb-6 text-sm text-gray-600">
-          {mode === "login"
+          Ingresa tus credenciales para acceder
+          {/* {mode === "login"
             ? "Ingresa tus credenciales para acceder"
-            : "Regístrate para usar el generador de boletas"}
+            : "Regístrate para usar el generador de boletas"} */}
         </p>
 
-        {mode === "signup" && (
+        {/* {mode === "signup" && (
           <div className="mb-4">
             <label htmlFor="fullName" className="mb-1.5 block text-sm font-medium text-gray-700">
               Nombre completo
@@ -78,7 +79,7 @@ export function AuthForm() {
               required
             />
           </div>
-        )}
+        )} */}
 
         <div className="mb-4">
           <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -128,10 +129,11 @@ export function AuthForm() {
           disabled={loading}
           className="w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-light disabled:opacity-50"
         >
-          {loading ? "Cargando..." : mode === "login" ? "Iniciar sesión" : "Crear cuenta"}
+          {loading ? "Cargando..." : "Iniciar sesión"}
+          {/* {loading ? "Cargando..." : mode === "login" ? "Iniciar sesión" : "Crear cuenta"} */}
         </button>
 
-        <p className="mt-4 text-center text-sm text-gray-600">
+        {/* <p className="mt-4 text-center text-sm text-gray-600">
           {mode === "login" ? (
             <>
               ¿No tienes cuenta?{" "}
@@ -155,7 +157,7 @@ export function AuthForm() {
               </button>
             </>
           )}
-        </p>
+        </p> */}
       </form>
     </div>
   );
