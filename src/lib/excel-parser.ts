@@ -22,6 +22,11 @@ function normalize(s: unknown): string {
   return String(s ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+/** For header matching: removes dots so "I.G.S.S." matches "igss" */
+function normalizeHeader(s: string): string {
+  return normalize(s).replace(/\./g, "");
+}
+
 export function fuzzyMatch(
   input: string,
   candidates: string[],
@@ -121,8 +126,15 @@ function discoverColumns(
         const cell = sheet[addr];
         if (!cell) continue;
         const val = normalize(String(cell.v ?? ""));
+        const valNoDots = normalizeHeader(String(cell.v ?? ""));
         for (const t of targets) {
-          if (val.includes(normalize(t)) || fuzzyMatch(val, [t], 0.4)) {
+          const tNorm = normalize(t);
+          const tNoDots = normalizeHeader(t);
+          if (
+            val.includes(tNorm) ||
+            valNoDots.includes(tNoDots) ||
+            fuzzyMatch(val, [t], 0.4)
+          ) {
             if (colMap[key] === undefined) {
               colMap[key] = c;
               break;
@@ -175,22 +187,43 @@ export function parseWorkbook(
   const companyName = String(sheet["B2"]?.v ?? "").trim();
   const dateRangeRaw = String(sheet["B4"]?.v ?? "").trim();
 
-  // Discover header rows
-  const requiredHeaders = ["no.", "nombre", "puesto", "ordinario mensual"];
-  const headerRows: number[] = [];
+  // Headers span 3 rows: scan all rows that contain any header keyword
+  const requiredHeaders = [
+    "no.",
+    "nombre",
+    "puesto",
+    "ordinario mensual",
+    "igss",
+    "isr",
+    "anticipo",
+  ];
+  const matchingRows: number[] = [];
 
-  for (let r = range.s.r; r <= Math.min(range.e.r, 20); r++) {
+  for (let r = range.s.r; r <= Math.min(range.e.r, 25); r++) {
     const rowVals: string[] = [];
     for (let c = range.s.c; c <= range.e.c; c++) {
       const addr = XLSX.utils.encode_cell({ r, c });
       if (sheet[addr]?.v != null)
-        rowVals.push(normalize(String(sheet[addr].v)));
+        rowVals.push(normalizeHeader(String(sheet[addr].v)));
     }
     const isHeader = requiredHeaders.some(
       (h) =>
-        rowVals.some((v) => v.includes(h) || fuzzyMatch(v, [h], 0.4))
+        rowVals.some(
+          (v) =>
+            v.includes(normalizeHeader(h)) || fuzzyMatch(v, [h], 0.4)
+        )
     );
-    if (isHeader) headerRows.push(r + 1);
+    if (isHeader) matchingRows.push(r + 1);
+  }
+
+  // Include all rows in the header block (fill gaps between first and last match)
+  const headerRows: number[] = [];
+  if (matchingRows.length > 0) {
+    const minR = Math.min(...matchingRows);
+    const maxR = Math.max(...matchingRows);
+    for (let r = minR; r <= maxR; r++) {
+      headerRows.push(r);
+    }
   }
 
   if (headerRows.length === 0) {
@@ -205,10 +238,10 @@ export function parseWorkbook(
     for (let c = 0; c < 10; c++) {
       const addr = XLSX.utils.encode_cell({ r: rowIdx, c });
       if (sheet[addr]?.v != null)
-        vals.push(normalize(String(sheet[addr].v)));
+        vals.push(normalizeHeader(String(sheet[addr].v)));
     }
     return (
-      vals.some((v) => v.includes("no.") || v === "no") &&
+      vals.some((v) => v.includes("no") || v === "no") &&
       vals.some((v) => v.includes("nombre")) &&
       vals.some((v) => v.includes("puesto")) &&
       vals.some((v) => v.includes("ordinario"))
