@@ -27,6 +27,14 @@ function normalizeHeader(s: string): string {
   return normalize(s).replace(/\./g, "");
 }
 
+/** Removes accents for flexible matching: "bonificación" -> "bonificacion" */
+function normalizeAccents(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 export function fuzzyMatch(
   input: string,
   candidates: string[],
@@ -94,8 +102,11 @@ const FIELD_TARGETS = [
   { key: "nombre" as const, targets: ["nombre"] },
   { key: "puesto" as const, targets: ["puesto"] },
   { key: "salario" as const, targets: ["ordinario mensual"] },
-  { key: "bonificacion" as const, targets: ["bonificacion decreto"] },
-  { key: "bonificacionEspecial" as const, targets: ["bonificacion especial"] },
+  {
+    key: "bonificacionEspecial" as const,
+    targets: ["bonificacion decreto", "bonificacion especial"],
+    multiColumn: true,
+  },
   { key: "igss" as const, targets: ["igss"] },
   { key: "isr" as const, targets: ["isr"] },
   {
@@ -105,14 +116,48 @@ const FIELD_TARGETS = [
   { key: "otros" as const, targets: ["otros"] },
 ];
 
+/** Matches headers for bonus sum: decreto (78-89, 37-2001, etc.) + especial */
+function headerIncludedInBonusSum(val: string): boolean {
+  const v = normalizeAccents(normalizeHeader(val));
+  return (
+    v.includes("bonificacion decreto") ||
+    v.includes("bonificacion especial") ||
+    v.includes("bon especial")
+  );
+}
+
 function discoverColumns(
   sheet: XLSX.WorkSheet,
   headerRows: number[]
-): Record<string, number> {
-  const colMap: Record<string, number> = {};
+): Record<string, number | number[]> {
+  const colMap: Record<string, number | number[]> = {};
   const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
 
-  for (const { key, targets } of FIELD_TARGETS) {
+  for (const field of FIELD_TARGETS) {
+    const { key, targets, multiColumn } = field as typeof field & {
+      multiColumn?: boolean;
+    };
+
+    if (multiColumn && key === "bonificacionEspecial") {
+      const cols = new Set<number>();
+      for (const r of headerRows) {
+        const rowIdx = r - 1;
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const addr = XLSX.utils.encode_cell({ r: rowIdx, c });
+          const cell = sheet[addr];
+          if (!cell) continue;
+          const val = String(cell.v ?? "");
+          if (headerIncludedInBonusSum(val)) {
+            cols.add(c);
+          }
+        }
+      }
+      if (cols.size > 0) {
+        colMap[key] = Array.from(cols).sort((a, b) => a - b);
+      }
+      continue;
+    }
+
     for (const r of headerRows) {
       const rowIdx = r - 1;
       for (let c = range.s.c; c <= range.e.c; c++) {
@@ -253,16 +298,20 @@ export function parseWorkbook(
 
   const colMap = discoverColumns(sheet, headerRows.map(Number));
   const requiredCols = ["ordinal", "nombre", "puesto", "salario"];
-  const missing = requiredCols.filter((k) => colMap[k] === undefined);
+  const missing = requiredCols.filter(
+    (k) => colMap[k] === undefined || (Array.isArray(colMap[k]) && (colMap[k] as number[]).length === 0)
+  );
   if (missing.length > 0) {
     throw new Error(`Columnas requeridas no encontradas: ${missing.join(", ")}`);
   }
 
   let firstDataRow = Math.max(...headerRows) + 1;
 
+  const ordCol = colMap.ordinal;
+  if (typeof ordCol !== "number") throw new Error("Columna ordinal no encontrada");
   const testAddr = XLSX.utils.encode_cell({
     r: firstDataRow - 1,
-    c: colMap.ordinal,
+    c: ordCol,
   });
   const testVal = sheet[testAddr]?.v;
   if (
@@ -271,7 +320,7 @@ export function parseWorkbook(
   ) {
     let found = false;
     for (let r = firstDataRow; r <= firstDataRow + 5; r++) {
-      const addr = XLSX.utils.encode_cell({ r: r - 1, c: colMap.ordinal });
+      const addr = XLSX.utils.encode_cell({ r: r - 1, c: ordCol });
       const v = sheet[addr]?.v;
       if (
         v != null &&
@@ -288,32 +337,39 @@ export function parseWorkbook(
   const receipts: ReceiptData[] = [];
 
   for (let r = firstDataRow - 1; r <= range.e.r; r++) {
-    const ordAddr = XLSX.utils.encode_cell({ r, c: colMap.ordinal });
+    const ordAddr = XLSX.utils.encode_cell({ r, c: ordCol });
     const ordVal = sheet[ordAddr]?.v;
     if (ordVal == null) continue;
     const ordNum =
       typeof ordVal === "number" ? ordVal : parseFloat(String(ordVal));
     if (isNaN(ordNum)) continue;
 
-    const nameAddr = XLSX.utils.encode_cell({ r, c: colMap.nombre });
+    const nameCol = colMap.nombre;
+    if (typeof nameCol !== "number") continue;
+    const nameAddr = XLSX.utils.encode_cell({ r, c: nameCol });
     const nameVal = sheet[nameAddr]?.v;
     if (!nameVal || normalize(String(nameVal)).length < 2) continue;
 
     const getCellVal = (key: string): unknown => {
-      if (colMap[key] === undefined) return 0;
-      const addr = XLSX.utils.encode_cell({ r, c: colMap[key] });
-      return sheet[addr]?.v ?? 0;
+      const col = colMap[key];
+      if (col === undefined) return 0;
+      if (Array.isArray(col)) {
+        return col.reduce(
+          (sum, c) => sum + toNum(sheet[XLSX.utils.encode_cell({ r, c })]?.v ?? 0),
+          0
+        );
+      }
+      return sheet[XLSX.utils.encode_cell({ r, c: col })]?.v ?? 0;
     };
 
     const salario = toNum(getCellVal("salario"));
-    const bonificacion = toNum(getCellVal("bonificacion"));
     const bonificacionEspecial = toNum(getCellVal("bonificacionEspecial"));
     const igss = toNum(getCellVal("igss"));
     const isr = toNum(getCellVal("isr"));
     const anticipo = toNum(getCellVal("anticipo"));
     const otros = toNum(getCellVal("otros"));
 
-    const totalIngresos = salario + bonificacion + bonificacionEspecial;
+    const totalIngresos = salario + bonificacionEspecial;
     const totalDescuentos = igss + isr + anticipo + otros;
     const liquido = totalIngresos - totalDescuentos;
 
@@ -325,7 +381,7 @@ export function parseWorkbook(
       nombre: String(nameVal).trim(),
       puesto: String(getCellVal("puesto") || "").trim(),
       salario,
-      bonificacion,
+      bonificacion: 0,
       bonificacionEspecial,
       igss,
       isr,

@@ -71,12 +71,6 @@ export function Receipt({ data, isSecondOnPage = false }: ReceiptProps) {
               <div className="line-item flex justify-between px-0.5 text-[9.5px] leading-[1.8]">
                 <span>Bonificación Decreto</span>
                 <span className="amount min-w-[70px] text-right tabular-nums">
-                  Q {fmt(data.bonificacion)}
-                </span>
-              </div>
-              <div className="line-item flex justify-between px-0.5 text-[9.5px] leading-[1.8]">
-                <span>Bonificación Especial</span>
-                <span className="amount min-w-[70px] text-right tabular-nums">
                   Q {fmt(data.bonificacionEspecial)}
                 </span>
               </div>

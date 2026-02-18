@@ -62,7 +62,7 @@ export function DashboardClient({ user }: DashboardClientProps) {
           employee_name: r.nombre,
           position: r.puesto,
           salary: r.salario,
-          bonus: r.bonificacion,
+          bonus: 0,
           special_bonus: r.bonificacionEspecial,
           igss: r.igss,
           isr: r.isr,
