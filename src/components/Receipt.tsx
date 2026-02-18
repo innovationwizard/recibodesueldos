@@ -69,9 +69,15 @@ export function Receipt({ data, isSecondOnPage = false }: ReceiptProps) {
                 </span>
               </div>
               <div className="line-item flex justify-between px-0.5 text-[9.5px] leading-[1.8]">
-                <span>Bonificación Decreto 78-89</span>
+                <span>Bonificación Decreto</span>
                 <span className="amount min-w-[70px] text-right tabular-nums">
                   Q {fmt(data.bonificacion)}
+                </span>
+              </div>
+              <div className="line-item flex justify-between px-0.5 text-[9.5px] leading-[1.8]">
+                <span>Bonificación Especial</span>
+                <span className="amount min-w-[70px] text-right tabular-nums">
+                  Q {fmt(data.bonificacionEspecial)}
                 </span>
               </div>
               <div className="total-line line-item mt-0.5 flex justify-between border-t border-gray-500 px-0.5 pt-0.5 text-[9.5px] font-bold leading-[1.8]">

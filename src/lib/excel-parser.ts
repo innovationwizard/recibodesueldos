@@ -94,14 +94,8 @@ const FIELD_TARGETS = [
   { key: "nombre" as const, targets: ["nombre"] },
   { key: "puesto" as const, targets: ["puesto"] },
   { key: "salario" as const, targets: ["ordinario mensual"] },
-  {
-    key: "bonificacion" as const,
-    targets: [
-      "bonificación decreto 78-89  y  37-2001 mensual",
-      "bonificacion decreto",
-      "bonificación decreto",
-    ],
-  },
+  { key: "bonificacion" as const, targets: ["bonificacion decreto"] },
+  { key: "bonificacionEspecial" as const, targets: ["bonificacion especial"] },
   { key: "igss" as const, targets: ["igss"] },
   { key: "isr" as const, targets: ["isr"] },
   {
@@ -159,6 +153,7 @@ export interface ReceiptData {
   puesto: string;
   salario: number;
   bonificacion: number;
+  bonificacionEspecial: number;
   igss: number;
   isr: number;
   anticipo: number;
@@ -193,6 +188,8 @@ export function parseWorkbook(
     "nombre",
     "puesto",
     "ordinario mensual",
+    "bonificacion decreto",
+    "bonificacion especial",
     "igss",
     "isr",
     "anticipo",
@@ -310,12 +307,13 @@ export function parseWorkbook(
 
     const salario = toNum(getCellVal("salario"));
     const bonificacion = toNum(getCellVal("bonificacion"));
+    const bonificacionEspecial = toNum(getCellVal("bonificacionEspecial"));
     const igss = toNum(getCellVal("igss"));
     const isr = toNum(getCellVal("isr"));
     const anticipo = toNum(getCellVal("anticipo"));
     const otros = toNum(getCellVal("otros"));
 
-    const totalIngresos = salario + bonificacion;
+    const totalIngresos = salario + bonificacion + bonificacionEspecial;
     const totalDescuentos = igss + isr + anticipo + otros;
     const liquido = totalIngresos - totalDescuentos;
 
@@ -328,6 +326,7 @@ export function parseWorkbook(
       puesto: String(getCellVal("puesto") || "").trim(),
       salario,
       bonificacion,
+      bonificacionEspecial,
       igss,
       isr,
       anticipo,

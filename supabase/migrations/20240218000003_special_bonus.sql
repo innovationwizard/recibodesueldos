@@ -1,0 +1,2 @@
+ALTER TABLE public.receipts
+ADD COLUMN IF NOT EXISTS special_bonus NUMERIC(12,2) DEFAULT 0;

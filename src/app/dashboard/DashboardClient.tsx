@@ -63,6 +63,7 @@ export function DashboardClient({ user }: DashboardClientProps) {
           position: r.puesto,
           salary: r.salario,
           bonus: r.bonificacion,
+          special_bonus: r.bonificacionEspecial,
           igss: r.igss,
           isr: r.isr,
           advance: r.anticipo,
