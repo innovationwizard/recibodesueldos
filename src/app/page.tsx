@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/Logo";
 import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/AuthForm";
+import { InviteRedirect } from "@/components/InviteRedirect";
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -15,6 +16,7 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <InviteRedirect />
       <header className="bg-primary px-6 py-6">
         <div className="mx-auto max-w-3xl">
           <Logo className="text-white" iconSize={28} />

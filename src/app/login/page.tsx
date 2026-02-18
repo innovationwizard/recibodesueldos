@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/Logo";
 import { redirect } from "next/navigation";
 import { AuthForm } from "@/components/AuthForm";
+import { InviteRedirect } from "@/components/InviteRedirect";
 
 export default async function LoginPage() {
   const supabase = await createClient();
@@ -16,6 +17,7 @@ export default async function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
+      <InviteRedirect />
       <header className="bg-primary px-6 py-6">
         <div className="mx-auto max-w-3xl">
           <Link href="/" className="block text-white hover:opacity-90 transition-opacity">

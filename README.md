@@ -5,7 +5,7 @@ Generador de boletas de pago (constancias de pago) desde planillas Excel. Aplica
 ## Características
 
 - **Single tenant, single user**: Una empresa, un usuario
-- **Autenticación**: Supabase Auth (email/contraseña)
+- **Autenticación**: Supabase Auth (invite + contraseña). Los usuarios invitados reciben correo y al hacer clic van a establecer contraseña, no a login.
 - **Carga de Excel**: Sube archivos .xlsx o .xls
 - **Búsqueda inteligente**: Encuentra la hoja correcta con coincidencia difusa
 - **Generación de boletas**: Constancias de pago listas para imprimir o guardar como PDF
@@ -38,7 +38,7 @@ Generador de boletas de pago (constancias de pago) desde planillas Excel. Aplica
    - Si el bucket no existe, créalo manualmente en Storage → New bucket: `planillas` (privado, 10 MB)
    - En Authentication → URL Configuration, agrega:
      - Site URL: `http://localhost:3000` (desarrollo) o tu URL de producción
-     - Redirect URLs: `http://localhost:3000/auth/callback` y `https://tu-dominio.vercel.app/auth/callback`
+     - Redirect URLs: `http://localhost:3000/auth/callback`, `http://localhost:3000/auth/confirm`, `http://localhost:3000/set-password`, `http://localhost:3000/login` (y las equivalentes HTTPS en producción)
 
 4. **Variables de entorno**
    ```bash
@@ -56,6 +56,14 @@ Generador de boletas de pago (constancias de pago) desde planillas Excel. Aplica
    ```
 
    Abre [http://localhost:3000](http://localhost:3000)
+
+## Invitar usuario
+
+En Supabase Dashboard → Authentication → Users → Invite user. El usuario recibe un correo; al hacer clic en el enlace va a `/set-password` para crear su contraseña (no al login).
+
+## Restablecer contraseña
+
+El usuario puede solicitar restablecer contraseña desde la pantalla de login (si implementas el enlace). Supabase envía un correo; al hacer clic va a `/set-password` para crear la nueva contraseña.
 
 ## Despliegue en Vercel
 
