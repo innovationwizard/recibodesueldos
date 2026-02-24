@@ -5,6 +5,9 @@ import * as XLSX from "xlsx";
 import { fuzzyMatch, parseWorkbook, readWorkbookFromArrayBuffer } from "@/lib/excel-parser";
 import type { ReceiptData } from "@/lib/excel-parser";
 import { Receipt } from "./Receipt";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
+import JSZip from "jszip";
 
 const STEPS = {
   UPLOAD: "upload",
@@ -67,6 +70,7 @@ export function ReceiptGenerator({ onSuccess }: ReceiptGeneratorProps) {
   const [receipts, setReceipts] = useState<ReceiptData[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [exporting, setExporting] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -152,6 +156,82 @@ export function ReceiptGenerator({ onSuccess }: ReceiptGeneratorProps) {
       printWindow.focus();
       printWindow.print();
     };
+  };
+
+  const handleExportSeparate = async () => {
+    if (receipts.length === 0) return;
+    setExporting(true);
+
+    try {
+      const zip = new JSZip();
+
+      for (const receipt of receipts) {
+        // Create off-screen container with print CSS
+        const container = document.createElement("div");
+        container.style.position = "absolute";
+        container.style.left = "-9999px";
+        container.style.top = "0";
+        container.style.width = "7.5in"; // letter width minus margins
+        container.innerHTML = `<style>${getPrintCSS()}</style>`;
+        document.body.appendChild(container);
+
+        // Render one receipt (always as first on page)
+        const receiptDiv = document.createElement("div");
+        receiptDiv.innerHTML = printRef.current
+          ? (() => {
+              const temp = document.createElement("div");
+              const singleReceipt = printRef.current.children[receipt.ordinal - 1];
+              if (singleReceipt) {
+                temp.innerHTML = singleReceipt.outerHTML;
+                // Ensure it uses receipt-top styling
+                const el = temp.firstElementChild as HTMLElement;
+                if (el) {
+                  el.className = el.className
+                    .replace("receipt-bottom", "receipt-top");
+                }
+              }
+              return temp.innerHTML;
+            })()
+          : "";
+        container.appendChild(receiptDiv);
+
+        // Capture as canvas
+        const canvas = await html2canvas(container, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+        });
+
+        // Create PDF (letter size: 8.5 x 11 in)
+        const pdf = new jsPDF({ orientation: "portrait", unit: "in", format: "letter" });
+        const imgData = canvas.toDataURL("image/png");
+        const pdfWidth = 7.5;
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        pdf.addImage(imgData, "PNG", 0.5, 0.4, pdfWidth, pdfHeight);
+
+        // Add to zip
+        const name = receipt.nombre
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "_");
+        const fileName = `${String(receipt.ordinal).padStart(2, "0")}-${name}.pdf`;
+        zip.file(fileName, pdf.output("arraybuffer"));
+
+        document.body.removeChild(container);
+      }
+
+      // Download zip
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `boletas-${receipts[0]?.companyName?.replace(/\s+/g, "_") ?? "pago"}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Error al exportar: ${(err as Error).message}`);
+    } finally {
+      setExporting(false);
+    }
   };
 
   const reset = () => {
@@ -340,13 +420,22 @@ export function ReceiptGenerator({ onSuccess }: ReceiptGeneratorProps) {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={handlePrint}
-                className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-light"
+                disabled={exporting}
+                className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-light disabled:opacity-50"
               >
-                Imprimir / Guardar PDF
+                Exportar juntos
+              </button>
+              <button
+                onClick={handleExportSeparate}
+                disabled={exporting}
+                className="rounded-lg border border-primary bg-white px-5 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/5 disabled:opacity-50"
+              >
+                {exporting ? "Exportando..." : "Exportar separados"}
               </button>
               <button
                 onClick={reset}
-                className="rounded-lg border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-100"
+                disabled={exporting}
+                className="rounded-lg border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-100 disabled:opacity-50"
               >
                 Procesar otro archivo
               </button>
