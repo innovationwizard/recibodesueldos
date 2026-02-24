@@ -18,20 +18,14 @@ function levenshtein(a: string, b: string): number {
   return dp[m][n];
 }
 
-function normalize(s: unknown): string {
-  return String(s ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-}
-
-/** For header matching: removes dots so "I.G.S.S." matches "igss" */
-function normalizeHeader(s: string): string {
-  return normalize(s).replace(/\./g, "");
-}
-
-/** Removes accents for flexible matching: "bonificación" -> "bonificacion" */
-function normalizeAccents(s: string): string {
-  return s
+/** Single normalization pipeline: lowercase → strip accents → strip dots → collapse whitespace */
+function norm(s: unknown): string {
+  return String(s ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+    .trim()
     .toLowerCase();
 }
 
@@ -40,15 +34,15 @@ export function fuzzyMatch(
   candidates: string[],
   threshold = 0.45
 ): { match: string; score: number } | null {
-  const norm = normalize(input);
-  if (!norm) return null;
+  const ni = norm(input);
+  if (!ni) return null;
   let best: string | null = null;
   let bestScore = Infinity;
   for (const c of candidates) {
-    const cn = normalize(c);
-    if (cn === norm) return { match: c, score: 0 };
-    const dist = levenshtein(norm, cn);
-    const maxLen = Math.max(norm.length, cn.length);
+    const cn = norm(c);
+    if (cn === ni) return { match: c, score: 0 };
+    const dist = levenshtein(ni, cn);
+    const maxLen = Math.max(ni.length, cn.length);
     const ratio = dist / maxLen;
     if (ratio < bestScore) {
       bestScore = ratio;
@@ -98,7 +92,7 @@ export function toNum(v: unknown): number {
 
 // ─── Column Discovery ─────────────────────────────────────────────────────────
 const FIELD_TARGETS = [
-  { key: "ordinal" as const, targets: ["no.", "no", "num", "número"] },
+  { key: "ordinal" as const, targets: ["no.", "no", "num", "número"], exact: true },
   { key: "nombre" as const, targets: ["nombre"] },
   { key: "puesto" as const, targets: ["puesto"] },
   { key: "salario" as const, targets: ["ordinario mensual"] },
@@ -107,18 +101,18 @@ const FIELD_TARGETS = [
     targets: ["bonificacion decreto", "bonificacion especial"],
     multiColumn: true,
   },
-  { key: "igss" as const, targets: ["igss"] },
-  { key: "isr" as const, targets: ["isr"] },
+  { key: "igss" as const, targets: ["igss"], exact: true },
+  { key: "isr" as const, targets: ["isr"], exact: true },
   {
     key: "anticipo" as const,
     targets: ["anticipo 1ra quincena", "anticipo"],
   },
-  { key: "otros" as const, targets: ["otros"] },
+  { key: "otros" as const, targets: ["otros"], exact: true },
 ];
 
 /** Matches headers for bonus sum: decreto (78-89, 37-2001, etc.) + especial */
 function headerIncludedInBonusSum(val: string): boolean {
-  const v = normalizeAccents(normalizeHeader(val));
+  const v = norm(val);
   return (
     v.includes("bonificacion decreto") ||
     v.includes("bonificacion especial") ||
@@ -134,8 +128,9 @@ function discoverColumns(
   const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
 
   for (const field of FIELD_TARGETS) {
-    const { key, targets, multiColumn } = field as typeof field & {
+    const { key, targets, multiColumn, exact } = field as typeof field & {
       multiColumn?: boolean;
+      exact?: boolean;
     };
 
     if (multiColumn && key === "bonificacionEspecial") {
@@ -158,31 +153,28 @@ function discoverColumns(
       continue;
     }
 
-    for (const r of headerRows) {
-      const rowIdx = r - 1;
-      for (let c = range.s.c; c <= range.e.c; c++) {
-        const addr = XLSX.utils.encode_cell({ r: rowIdx, c });
-        const cell = sheet[addr];
-        if (!cell) continue;
-        const val = normalize(String(cell.v ?? ""));
-        const valNoDots = normalizeHeader(String(cell.v ?? ""));
-        for (const t of targets) {
-          const tNorm = normalize(t);
-          const tNoDots = normalizeHeader(t);
-          if (
-            val.includes(tNorm) ||
-            valNoDots.includes(tNoDots) ||
-            fuzzyMatch(val, [t], 0.4)
-          ) {
-            if (colMap[key] === undefined) {
-              colMap[key] = c;
-              break;
-            }
+    // Try targets in order (most specific first), each gets a full scan
+    for (const t of targets) {
+      if (colMap[key] !== undefined) break;
+      const tNorm = norm(t);
+      const re = exact
+        ? new RegExp(`(?:^|\\b)${tNorm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\b|$)`)
+        : null;
+      for (const r of headerRows) {
+        if (colMap[key] !== undefined) break;
+        const rowIdx = r - 1;
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const addr = XLSX.utils.encode_cell({ r: rowIdx, c });
+          const cell = sheet[addr];
+          if (!cell) continue;
+          const val = norm(cell.v);
+          const matches = re ? re.test(val) : val.includes(tNorm);
+          if (matches || fuzzyMatch(val, [t], 0.4)) {
+            colMap[key] = c;
+            break;
           }
         }
-        if (colMap[key] !== undefined) break;
       }
-      if (colMap[key] !== undefined) break;
     }
   }
   return colMap;
@@ -212,6 +204,7 @@ export interface ParseResult {
   receipts: ReceiptData[];
   companyName: string;
   dateRange: string;
+  warnings: string[];
 }
 
 // ─── Main Parser ─────────────────────────────────────────────────────────────
@@ -246,13 +239,13 @@ export function parseWorkbook(
     for (let c = range.s.c; c <= range.e.c; c++) {
       const addr = XLSX.utils.encode_cell({ r, c });
       if (sheet[addr]?.v != null)
-        rowVals.push(normalizeHeader(String(sheet[addr].v)));
+        rowVals.push(norm(sheet[addr].v));
     }
     const isHeader = requiredHeaders.some(
       (h) =>
         rowVals.some(
           (v) =>
-            v.includes(normalizeHeader(h)) || fuzzyMatch(v, [h], 0.4)
+            v.includes(norm(h)) || fuzzyMatch(v, [h], 0.4)
         )
     );
     if (isHeader) matchingRows.push(r + 1);
@@ -277,10 +270,10 @@ export function parseWorkbook(
   const mainHeaderRow = headerRows.find((r) => {
     const rowIdx = r - 1;
     const vals: string[] = [];
-    for (let c = 0; c < 10; c++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
       const addr = XLSX.utils.encode_cell({ r: rowIdx, c });
       if (sheet[addr]?.v != null)
-        vals.push(normalizeHeader(String(sheet[addr].v)));
+        vals.push(norm(sheet[addr].v));
     }
     return (
       vals.some((v) => v.includes("no") || v === "no") &&
@@ -297,6 +290,25 @@ export function parseWorkbook(
   }
 
   const colMap = discoverColumns(sheet, headerRows.map(Number));
+  const warnings: string[] = [];
+
+  // Detect duplicate column assignments (two fields mapped to same column)
+  const colToFields: Record<number, string[]> = {};
+  for (const [field, col] of Object.entries(colMap)) {
+    const cols = Array.isArray(col) ? col : [col];
+    for (const c of cols) {
+      (colToFields[c] ??= []).push(field);
+    }
+  }
+  for (const [col, fields] of Object.entries(colToFields)) {
+    if (fields.length > 1) {
+      const colLetter = XLSX.utils.encode_col(Number(col));
+      warnings.push(
+        `Columna ${colLetter} asignada a múltiples campos: ${fields.join(", ")}`
+      );
+    }
+  }
+
   const requiredCols = ["ordinal", "nombre", "puesto", "salario"];
   const missing = requiredCols.filter(
     (k) => colMap[k] === undefined || (Array.isArray(colMap[k]) && (colMap[k] as number[]).length === 0)
@@ -348,7 +360,7 @@ export function parseWorkbook(
     if (typeof nameCol !== "number") continue;
     const nameAddr = XLSX.utils.encode_cell({ r, c: nameCol });
     const nameVal = sheet[nameAddr]?.v;
-    if (!nameVal || normalize(String(nameVal)).length < 2) continue;
+    if (!nameVal || norm(nameVal).length < 2) continue;
 
     const getCellVal = (key: string): unknown => {
       const col = colMap[key];
@@ -401,6 +413,7 @@ export function parseWorkbook(
     receipts,
     companyName,
     dateRange: dateRangeRaw.trim(),
+    warnings,
   };
 }
 

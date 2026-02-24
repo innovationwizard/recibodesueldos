@@ -126,10 +126,11 @@ export function ReceiptGenerator({ onSuccess }: ReceiptGeneratorProps) {
     addLog(`Procesando hoja: "${matchedSheet}"`);
 
     try {
-      const { receipts: parsedReceipts, companyName, dateRange } = parseWorkbook(
+      const { receipts: parsedReceipts, companyName, dateRange, warnings } = parseWorkbook(
         workbook,
         matchedSheet
       );
+      for (const w of warnings) addLog(`⚠ ${w}`);
       addLog(`Empleados procesados: ${parsedReceipts.length}`);
       setReceipts(parsedReceipts);
       setStep(STEPS.DONE);
