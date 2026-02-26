@@ -71,7 +71,7 @@ const MONTHS_ES: Record<string, string> = {
 function parseLastDate(rangeStr: string): string {
   if (!rangeStr) return "";
   const s = String(rangeStr).trim();
-  const m = s.match(/AL\s+(\d{1,2})\s+DE\s+(\w+)\s+(\d{4})/i);
+  const m = s.match(/AL\s+(\d{1,2})\s+(?:DE\s+)?(\w+)\s+(\d{4})/i);
   if (m) {
     const day = parseInt(m[1], 10);
     const monthRaw = m[2].toLowerCase();
@@ -241,13 +241,11 @@ export function parseWorkbook(
       if (sheet[addr]?.v != null)
         rowVals.push(norm(sheet[addr].v));
     }
-    const isHeader = requiredHeaders.some(
-      (h) =>
-        rowVals.some(
-          (v) =>
-            v.includes(norm(h)) || fuzzyMatch(v, [h], 0.4)
-        )
-    );
+    const isHeader = requiredHeaders.some((h) => {
+      const hn = norm(h);
+      const re = new RegExp(`(?:^|\\b)${hn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\b|$)`);
+      return rowVals.some((v) => re.test(v) || fuzzyMatch(v, [h], 0.4));
+    });
     if (isHeader) matchingRows.push(r + 1);
   }
 
