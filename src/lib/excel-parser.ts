@@ -241,12 +241,12 @@ export function parseWorkbook(
       if (sheet[addr]?.v != null)
         rowVals.push(norm(sheet[addr].v));
     }
-    const isHeader = requiredHeaders.some((h) => {
+    const headerHits = requiredHeaders.filter((h) => {
       const hn = norm(h);
       const re = new RegExp(`(?:^|\\b)${hn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\b|$)`);
       return rowVals.some((v) => re.test(v) || fuzzyMatch(v, [h], 0.4));
-    });
-    if (isHeader) matchingRows.push(r + 1);
+    }).length;
+    if (headerHits >= 2) matchingRows.push(r + 1);
   }
 
   // Include all rows in the header block (fill gaps between first and last match)
