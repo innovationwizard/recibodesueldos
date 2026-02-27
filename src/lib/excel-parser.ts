@@ -87,7 +87,7 @@ const FIELD_TARGETS: { key: string; targets: string[]; multi?: boolean; exclude?
   { key: "ordinal", targets: ["no.", "no", "num", "número"] },
   { key: "nombre", targets: ["nombre"] },
   { key: "puesto", targets: ["puesto"] },
-  { key: "salario", targets: ["liquido a recibir 2da quincena"] },
+  { key: "salario", targets: ["salario base devengado en el mes"] },
   { key: "bonificacionEspecial", targets: ["bonificacion devengada en el mes"] },
   { key: "igss", targets: ["igss"] },
   { key: "isr", targets: ["isr"] },
