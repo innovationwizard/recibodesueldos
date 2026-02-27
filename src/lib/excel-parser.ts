@@ -88,7 +88,7 @@ const FIELD_TARGETS: { key: string; targets: string[]; multi?: boolean; exclude?
   { key: "nombre", targets: ["nombre"] },
   { key: "puesto", targets: ["puesto"] },
   { key: "salario", targets: ["salario base devengado en el mes"] },
-  { key: "bonificacionEspecial", targets: ["bonificacion decreto"], multi: true, exclude: ["diaria", "devengada", "especial"] },
+  { key: "bonificacionEspecial", targets: ["bonificacion decreto"], multi: true, exclude: ["diaria", "devengada", "especial", "incentivo"] },
   { key: "igss", targets: ["igss"] },
   { key: "isr", targets: ["isr"] },
   { key: "anticipo", targets: ["anticipo 1ra quincena", "anticipo"] },
