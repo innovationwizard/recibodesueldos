@@ -55,9 +55,8 @@ export function fuzzyMatch(
 
 export function toNum(v: unknown): number {
   if (v == null) return 0;
-  if (typeof v === "number") return v;
-  const parsed = parseFloat(String(v).replace(/,/g, ""));
-  return isNaN(parsed) ? 0 : parsed;
+  const n = typeof v === "number" ? v : parseFloat(String(v).replace(/,/g, ""));
+  return isNaN(n) ? 0 : Math.round(n * 100) / 100;
 }
 
 // ─── Date Parsing ────────────────────────────────────────────────────────────
