@@ -5,9 +5,10 @@ import * as XLSX from "xlsx";
 import { fuzzyMatch, parseWorkbook, readWorkbookFromArrayBuffer } from "@/lib/excel-parser";
 import type { ReceiptData } from "@/lib/excel-parser";
 import { Receipt } from "./Receipt";
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import { getPrintCSS } from "@/lib/print-css";
+import { generateSingleReceiptPdf, getReceiptHtml, receiptFileName } from "@/lib/pdf-generator";
 import JSZip from "jszip";
+import { EmailFlow } from "./email/EmailFlow";
 
 const STEPS = {
   UPLOAD: "upload",
@@ -18,39 +19,6 @@ const STEPS = {
   ERROR: "error",
 } as const;
 
-function getPrintCSS(): string {
-  return `
-    @page { size: letter; margin: 0.4in 0.5in; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #1a1a2e; }
-    .receipt { width: 100%; height: 4.6in; page-break-inside: avoid; display: flex; flex-direction: column; }
-    .receipt-top { padding-bottom: 0.15in; border-bottom: 1px dashed #ccc; }
-    .receipt-bottom { padding-top: 0.15in; }
-    .receipt-inner { flex: 1; display: flex; flex-direction: column; }
-    .receipt-header { text-align: center; margin-bottom: 6px; }
-    .company-name { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
-    .receipt-title { font-size: 11px; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; color: #444; margin-top: 2px; }
-    .receipt-date { text-align: right; font-size: 10px; color: #555; margin-bottom: 8px; }
-    .receipt-info-grid { margin-bottom: 8px; }
-    .info-row { display: flex; font-size: 10.5px; line-height: 1.7; }
-    .info-label { width: 90px; font-weight: 600; flex-shrink: 0; }
-    .info-value { flex: 1; border-bottom: 1px solid #ddd; padding-left: 4px; }
-    .receipt-body { flex: 1; }
-    .columns-container { display: flex; gap: 16px; margin-bottom: 8px; }
-    .column-ingresos, .column-egresos { flex: 1; }
-    .column-header { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1.5px solid #1a1a2e; padding-bottom: 3px; margin-bottom: 4px; }
-    .line-item { display: flex; justify-content: space-between; font-size: 10px; line-height: 1.8; padding: 0 2px; }
-    .line-item .amount { font-variant-numeric: tabular-nums; text-align: right; min-width: 80px; }
-    .total-line { font-weight: 700; border-top: 1px solid #999; margin-top: 3px; padding-top: 3px; }
-    .liquido-section { display: flex; justify-content: space-between; align-items: center; background: #1a1a2e; color: #fff; padding: 6px 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; margin-top: 4px; }
-    .liquido-amount { font-size: 13px; font-variant-numeric: tabular-nums; }
-    .signature-section { margin-top: auto; padding-top: 16px; display: flex; justify-content: center; }
-    .signature-block { text-align: center; width: 220px; }
-    .signature-line { border-bottom: 1px solid #333; height: 28px; }
-    .signature-label { font-size: 9px; color: #555; margin-top: 3px; letter-spacing: 0.03em; }
-  `;
-}
-
 interface ReceiptGeneratorProps {
   onSuccess?: (
     receipts: ReceiptData[],
@@ -58,9 +26,12 @@ interface ReceiptGeneratorProps {
     dateRange: string,
     file?: File
   ) => void;
+  onReset?: () => void;
+  batchId?: string | null;
+  receiptIds?: string[];
 }
 
-export function ReceiptGenerator({ onSuccess }: ReceiptGeneratorProps) {
+export function ReceiptGenerator({ onSuccess, onReset, batchId, receiptIds }: ReceiptGeneratorProps) {
   const [step, setStep] = useState<(typeof STEPS)[keyof typeof STEPS]>(STEPS.UPLOAD);
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
@@ -71,6 +42,7 @@ export function ReceiptGenerator({ onSuccess }: ReceiptGeneratorProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [showEmailFlow, setShowEmailFlow] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -166,58 +138,14 @@ export function ReceiptGenerator({ onSuccess }: ReceiptGeneratorProps) {
     try {
       const zip = new JSZip();
 
-      for (const receipt of receipts) {
-        // Create off-screen container with print CSS
-        const container = document.createElement("div");
-        container.style.position = "absolute";
-        container.style.left = "-9999px";
-        container.style.top = "0";
-        container.style.width = "7.5in"; // letter width minus margins
-        container.innerHTML = `<style>${getPrintCSS()}</style>`;
-        document.body.appendChild(container);
+      for (let i = 0; i < receipts.length; i++) {
+        const receipt = receipts[i];
+        const html = getReceiptHtml(printRef, i);
+        if (!html) continue;
 
-        // Render one receipt (always as first on page)
-        const receiptDiv = document.createElement("div");
-        receiptDiv.innerHTML = printRef.current
-          ? (() => {
-              const temp = document.createElement("div");
-              const singleReceipt = printRef.current.children[receipt.ordinal - 1];
-              if (singleReceipt) {
-                temp.innerHTML = singleReceipt.outerHTML;
-                // Ensure it uses receipt-top styling
-                const el = temp.firstElementChild as HTMLElement;
-                if (el) {
-                  el.className = el.className
-                    .replace("receipt-bottom", "receipt-top");
-                }
-              }
-              return temp.innerHTML;
-            })()
-          : "";
-        container.appendChild(receiptDiv);
-
-        // Capture as canvas
-        const canvas = await html2canvas(container, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-        });
-
-        // Create PDF (letter size: 8.5 x 11 in)
-        const pdf = new jsPDF({ orientation: "portrait", unit: "in", format: "letter" });
-        const imgData = canvas.toDataURL("image/png");
-        const pdfWidth = 7.5;
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        pdf.addImage(imgData, "PNG", 0.5, 0.4, pdfWidth, pdfHeight);
-
-        // Add to zip
-        const name = receipt.nombre
-          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-          .replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "_");
-        const fileName = `${String(receipt.ordinal).padStart(2, "0")}-${name}.pdf`;
-        zip.file(fileName, pdf.output("arraybuffer"));
-
-        document.body.removeChild(container);
+        const { pdfArrayBuffer } = await generateSingleReceiptPdf(html);
+        const fileName = receiptFileName(receipt.ordinal, receipt.nombre);
+        zip.file(fileName, pdfArrayBuffer);
       }
 
       // Download zip
@@ -245,6 +173,8 @@ export function ReceiptGenerator({ onSuccess }: ReceiptGeneratorProps) {
     setReceipts([]);
     setLogs([]);
     setUploadedFile(null);
+    setShowEmailFlow(false);
+    onReset?.();
   };
 
   const stepOrder = [STEPS.UPLOAD, STEPS.SHEET_SELECT, STEPS.SHEET_CONFIRM, STEPS.DONE];
@@ -400,64 +330,83 @@ export function ReceiptGenerator({ onSuccess }: ReceiptGeneratorProps) {
       {/* Step: Done */}
       {step === STEPS.DONE && (
         <>
-          <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                <polyline points="22 4 12 14.01 9 11.01" />
-              </svg>
-              <span>
-                {receipts.length} boleta{receipts.length > 1 ? "s" : ""}{" "}
-                generada{receipts.length > 1 ? "s" : ""}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={handlePrint}
-                disabled={exporting}
-                className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-light disabled:opacity-50"
-              >
-                Exportar juntos
-              </button>
-              <button
-                onClick={handleExportSeparate}
-                disabled={exporting}
-                className="rounded-lg border border-primary bg-white px-5 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/5 disabled:opacity-50"
-              >
-                {exporting ? "Exportando..." : "Exportar separados"}
-              </button>
-              <button
-                onClick={reset}
-                disabled={exporting}
-                className="rounded-lg border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-100 disabled:opacity-50"
-              >
-                Procesar otro archivo
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-2">
-            <h3 className="mb-3 text-sm font-semibold tracking-wide text-gray-600">
-              Vista Previa
-            </h3>
-            <div className="grid gap-3">
-              {receipts.map((r, i) => (
-                <div
-                  key={i}
-                  className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm"
+          {showEmailFlow && batchId ? (
+            <EmailFlow
+              receipts={receipts}
+              batchId={batchId}
+              receiptIds={receiptIds ?? []}
+              printRef={printRef}
+              onClose={() => setShowEmailFlow(false)}
+            />
+          ) : (
+            <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
                 >
-                  <Receipt data={r} isSecondOnPage={false} />
-                </div>
-              ))}
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+                <span>
+                  {receipts.length} boleta{receipts.length > 1 ? "s" : ""}{" "}
+                  generada{receipts.length > 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handlePrint}
+                  disabled={exporting}
+                  className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-light disabled:opacity-50"
+                >
+                  Exportar juntos
+                </button>
+                <button
+                  onClick={handleExportSeparate}
+                  disabled={exporting}
+                  className="rounded-lg border border-primary bg-white px-5 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/5 disabled:opacity-50"
+                >
+                  {exporting ? "Exportando..." : "Exportar separados"}
+                </button>
+                <button
+                  onClick={() => setShowEmailFlow(true)}
+                  disabled={exporting || !batchId}
+                  className="rounded-lg border border-primary bg-white px-5 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/5 disabled:opacity-50"
+                >
+                  Enviar por correo
+                </button>
+                <button
+                  onClick={reset}
+                  disabled={exporting}
+                  className="rounded-lg border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-100 disabled:opacity-50"
+                >
+                  Procesar otro archivo
+                </button>
+              </div>
             </div>
-          </div>
+          )}
+
+          {!showEmailFlow && (
+            <div className="mt-2">
+              <h3 className="mb-3 text-sm font-semibold tracking-wide text-gray-600">
+                Vista Previa
+              </h3>
+              <div className="grid gap-3">
+                {receipts.map((r, i) => (
+                  <div
+                    key={i}
+                    className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm"
+                  >
+                    <Receipt data={r} isSecondOnPage={false} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div ref={printRef} className="hidden">
             {receipts.map((r, i) => (

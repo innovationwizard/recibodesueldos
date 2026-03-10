@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { Logo } from "@/components/Logo";
@@ -14,6 +14,8 @@ interface DashboardClientProps {
 
 export function DashboardClient({ user }: DashboardClientProps) {
   const supabase = createClient();
+  const [batchId, setBatchId] = useState<string | null>(null);
+  const [receiptIds, setReceiptIds] = useState<string[]>([]);
 
   const handleSuccess = useCallback(
     async (
@@ -56,6 +58,8 @@ export function DashboardClient({ user }: DashboardClientProps) {
           return;
         }
 
+        setBatchId(batch.id);
+
         const receiptRows = receipts.map((r) => ({
           batch_id: batch.id,
           ordinal: r.ordinal,
@@ -73,13 +77,25 @@ export function DashboardClient({ user }: DashboardClientProps) {
           net_pay: r.liquido,
         }));
 
-        await supabase.from("receipts").insert(receiptRows);
+        const { data: insertedReceipts } = await supabase
+          .from("receipts")
+          .insert(receiptRows)
+          .select("id");
+
+        if (insertedReceipts) {
+          setReceiptIds(insertedReceipts.map((r: { id: string }) => r.id));
+        }
       } catch (err) {
         console.error("Error al guardar en base de datos:", err);
       }
     },
     [user.id, supabase]
   );
+
+  const handleReset = useCallback(() => {
+    setBatchId(null);
+    setReceiptIds([]);
+  }, []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -98,7 +114,13 @@ export function DashboardClient({ user }: DashboardClientProps) {
               Cargue planilla Excel → Genere boletas → Imprima PDF
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/empleados"
+              className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/20"
+            >
+              Empleados
+            </Link>
             <span className="text-sm text-white/80">{user.email}</span>
             <button
               onClick={handleSignOut}
@@ -111,7 +133,12 @@ export function DashboardClient({ user }: DashboardClientProps) {
       </header>
 
       <main className="mx-auto max-w-3xl px-4 py-8">
-        <ReceiptGenerator onSuccess={handleSuccess} />
+        <ReceiptGenerator
+          onSuccess={handleSuccess}
+          onReset={handleReset}
+          batchId={batchId}
+          receiptIds={receiptIds}
+        />
       </main>
     </>
   );

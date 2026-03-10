@@ -20,7 +20,7 @@ function levenshtein(a: string, b: string): number {
 }
 
 /** lowercase → strip accents → strip dots → collapse whitespace */
-function norm(s: unknown): string {
+export function norm(s: unknown): string {
   return String(s ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
