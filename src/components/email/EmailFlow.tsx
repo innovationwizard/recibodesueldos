@@ -101,30 +101,36 @@ export function EmailFlow({ receipts, batchId, receiptIds, printRef, onClose }: 
           const html = getReceiptHtml(printRef, recipient.receiptIndex);
           if (!html) throw new Error("No se pudo obtener el HTML de la boleta");
 
-          const { pdfBase64 } = await generateSingleReceiptPdf(html);
+          const { pdfArrayBuffer } = await generateSingleReceiptPdf(html);
           const fileName = receiptFileName(
             receipts[recipient.receiptIndex].ordinal,
             recipient.employeeName
           );
 
-          // Send via API
+          // Send via FormData to avoid JSON body size limits
+          const formData = new FormData();
+          formData.append("batchId", batchId);
+          formData.append("receiptId", receiptIds[recipient.receiptIndex] || "");
+          formData.append("employeeName", recipient.employeeName);
+          formData.append("recipientEmail", recipient.email);
+          formData.append("fromAddress", composeData.fromAddress);
+          formData.append("subject", composeData.subject);
+          formData.append("bodyText", composeData.bodyText);
+          formData.append("pdf", new Blob([pdfArrayBuffer], { type: "application/pdf" }), fileName);
+          formData.append("pdfFileName", fileName);
+
           const response = await fetch("/api/send-receipt-email", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              batchId,
-              receiptId: receiptIds[recipient.receiptIndex] || "",
-              employeeName: recipient.employeeName,
-              recipientEmail: recipient.email,
-              fromAddress: composeData.fromAddress,
-              subject: composeData.subject,
-              bodyText: composeData.bodyText,
-              pdfBase64,
-              pdfFileName: fileName,
-            }),
+            body: formData,
           });
 
-          const result = await response.json();
+          const responseText = await response.text();
+          let result: { success?: boolean; error?: string };
+          try {
+            result = JSON.parse(responseText);
+          } catch {
+            throw new Error(`Error del servidor (${response.status}): ${responseText.slice(0, 200)}`);
+          }
 
           if (result.success) {
             setSendStatuses((prev) =>

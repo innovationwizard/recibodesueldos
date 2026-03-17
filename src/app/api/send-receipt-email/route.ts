@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB base64
+const MAX_PDF_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_SUBJECT_LEN = 500;
 const MAX_BODY_LEN = 5000;
 
@@ -29,29 +29,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   }
 
-  // 3. Parse body
-  let body: {
-    batchId: string;
-    receiptId: string;
-    employeeName: string;
-    recipientEmail: string;
-    fromAddress: string;
-    subject: string;
-    bodyText: string;
-    pdfBase64: string;
-    pdfFileName: string;
-  };
-
+  // 3. Parse FormData
+  let formData: FormData;
   try {
-    body = await request.json();
+    formData = await request.formData();
   } catch {
     return NextResponse.json({ error: "Cuerpo de solicitud inválido" }, { status: 400 });
   }
 
-  // 4. Validate fields
-  const { batchId, receiptId, employeeName, recipientEmail, fromAddress, subject, bodyText, pdfBase64, pdfFileName } = body;
+  const batchId = formData.get("batchId") as string;
+  const receiptId = formData.get("receiptId") as string;
+  const employeeName = formData.get("employeeName") as string;
+  const recipientEmail = formData.get("recipientEmail") as string;
+  const fromAddress = formData.get("fromAddress") as string;
+  const subject = formData.get("subject") as string;
+  const bodyText = formData.get("bodyText") as string;
+  const pdfFile = formData.get("pdf") as File | null;
+  const pdfFileName = formData.get("pdfFileName") as string;
 
-  if (!batchId || !employeeName || !recipientEmail || !fromAddress || !subject || !bodyText || !pdfBase64 || !pdfFileName) {
+  // 4. Validate fields
+  if (!batchId || !employeeName || !recipientEmail || !fromAddress || !subject || !bodyText || !pdfFile || !pdfFileName) {
     return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 });
   }
 
@@ -67,7 +64,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Cuerpo excede ${MAX_BODY_LEN} caracteres` }, { status: 400 });
   }
 
-  if (pdfBase64.length > MAX_PDF_SIZE) {
+  if (pdfFile.size > MAX_PDF_SIZE) {
     return NextResponse.json({ error: "PDF excede el límite de 10MB" }, { status: 400 });
   }
 
@@ -84,6 +81,8 @@ export async function POST(request: NextRequest) {
 
   // 6. Send via Resend
   try {
+    const pdfBuffer = Buffer.from(await pdfFile.arrayBuffer());
+
     const { data, error } = await resend.emails.send({
       from: fromAddress,
       to: [recipientEmail],
@@ -92,13 +91,12 @@ export async function POST(request: NextRequest) {
       attachments: [
         {
           filename: pdfFileName,
-          content: Buffer.from(pdfBase64, "base64"),
+          content: pdfBuffer,
         },
       ],
     });
 
     if (error) {
-      // Resend returned an error (e.g., invalid domain, rate limit)
       const errorMessage = error.message || "Error de Resend desconocido";
 
       await supabase.from("email_logs").insert({
@@ -129,7 +127,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, resendId: data?.id });
   } catch (err) {
-    // 8. Log failure (network error, unexpected)
     const errorMessage = err instanceof Error ? err.message : "Error desconocido";
 
     await supabase.from("email_logs").insert({

@@ -16,7 +16,7 @@ interface EmailComposeProps {
 }
 
 export function EmailCompose({ companyName, periodRange, onSubmit, onBack }: EmailComposeProps) {
-  const [fromAddress, setFromAddress] = useState("");
+  const [fromAddress, setFromAddress] = useState("paola.morales@grupoorion.com.gt");
   const [subject, setSubject] = useState(`Boleta de pago - ${periodRange}`);
   const [bodyText, setBodyText] = useState(
     `Estimado/a colaborador/a,\n\nAdjunto encontrará su boleta de pago correspondiente al período ${periodRange}.\n\nSaludos cordiales,\n${companyName}`
