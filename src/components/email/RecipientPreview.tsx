@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { MatchedRecipient, UnmatchedEntry } from "@/lib/email-mapping-parser";
 
 interface RecipientPreviewProps {
@@ -8,6 +9,7 @@ interface RecipientPreviewProps {
   warnings: string[];
   onToggle: (receiptIndex: number) => void;
   onToggleAll: (selected: boolean) => void;
+  onUpdateEmail: (receiptIndex: number, email: string) => void;
   onConfirm: () => void;
   onBack: () => void;
 }
@@ -18,11 +20,15 @@ export function RecipientPreview({
   warnings,
   onToggle,
   onToggleAll,
+  onUpdateEmail,
   onConfirm,
   onBack,
 }: RecipientPreviewProps) {
   const selectedCount = matched.filter((m) => m.selected).length;
   const allSelected = selectedCount === matched.length;
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   return (
     <div className="space-y-4">
@@ -91,7 +97,52 @@ export function RecipientPreview({
                     <div className="text-[11px] text-gray-400">Mapeo: {m.mappingName}</div>
                   )}
                 </td>
-                <td className="px-3 py-2 text-gray-600">{m.email}</td>
+                <td className="px-3 py-2">
+                  {editingIndex === m.receiptIndex ? (
+                    <div className="flex gap-1">
+                      <input
+                        type="email"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && EMAIL_RE.test(editValue.trim())) {
+                            onUpdateEmail(m.receiptIndex, editValue.trim());
+                            setEditingIndex(null);
+                          } else if (e.key === "Escape") {
+                            setEditingIndex(null);
+                          }
+                        }}
+                        className="w-full rounded border border-gray-300 px-2 py-1 text-sm outline-none focus:border-primary"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => {
+                          if (EMAIL_RE.test(editValue.trim())) {
+                            onUpdateEmail(m.receiptIndex, editValue.trim());
+                            setEditingIndex(null);
+                          }
+                        }}
+                        className="rounded bg-primary px-2 py-1 text-xs font-medium text-white"
+                      >
+                        OK
+                      </button>
+                      <button
+                        onClick={() => setEditingIndex(null)}
+                        className="rounded bg-gray-200 px-2 py-1 text-xs font-medium text-gray-700"
+                      >
+                        X
+                      </button>
+                    </div>
+                  ) : (
+                    <span
+                      className="cursor-pointer text-gray-600 hover:text-primary hover:underline"
+                      onClick={() => { setEditingIndex(m.receiptIndex); setEditValue(m.email); }}
+                      title="Clic para editar correo"
+                    >
+                      {m.email}
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-center">
                   {m.matchScore === 0 ? (
                     <span className="inline-block rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">

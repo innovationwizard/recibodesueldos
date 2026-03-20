@@ -65,6 +65,18 @@ export function EmailFlow({ receipts, batchId, receiptIds, printRef, onClose }: 
     });
   }, []);
 
+  const handleUpdateEmail = useCallback((receiptIndex: number, email: string) => {
+    setMappingResult((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        matched: prev.matched.map((m) =>
+          m.receiptIndex === receiptIndex ? { ...m, email } : m
+        ),
+      };
+    });
+  }, []);
+
   // ─── Step 4: Send emails ───
   const sendEmails = useCallback(
     async (recipients: MatchedRecipient[]) => {
@@ -245,6 +257,7 @@ export function EmailFlow({ receipts, batchId, receiptIds, printRef, onClose }: 
           warnings={mappingResult.warnings}
           onToggle={handleToggle}
           onToggleAll={handleToggleAll}
+          onUpdateEmail={handleUpdateEmail}
           onConfirm={handleConfirmSend}
           onBack={() => setStep("compose")}
         />

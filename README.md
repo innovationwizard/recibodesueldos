@@ -10,6 +10,9 @@ Generador de boletas de pago (constancias de pago) desde planillas Excel. Aplica
 - **Búsqueda inteligente**: Encuentra la hoja correcta con coincidencia difusa
 - **Generación de boletas**: Constancias de pago listas para imprimir o guardar como PDF
 - **Historial**: Los lotes y archivos Excel se guardan en Supabase (base de datos + storage)
+- **Directorio de empleados**: Gestión de empleados con importación masiva desde Excel y formulario para agregar empleados uno por uno mediante modal
+- **Envío de boletas por correo**: Flujo de 5 pasos (mapeo de destinatarios → redacción → vista previa → envío → resultados) vía Resend con adjunto PDF
+- **Navegación**: Logo y título del header son clickeables para regresar al dashboard desde cualquier pantalla
 
 ## Requisitos
 
@@ -45,10 +48,11 @@ Generador de boletas de pago (constancias de pago) desde planillas Excel. Aplica
    ```bash
    cp .env.example .env.local
    ```
-   Edita `.env.local` con tus credenciales de Supabase:
+   Edita `.env.local` con tus credenciales:
    ```
    NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
+   RESEND_API_KEY=re_xxxxxxxxx
    ```
 
 5. **Ejecutar en desarrollo**
@@ -100,12 +104,29 @@ La aplicación espera planillas con la siguiente estructura:
 
 La búsqueda de columnas es flexible y acepta variaciones en los nombres de encabezados.
 
+## Estructura de la aplicación
+
+- `/dashboard` — Pantalla principal: carga de planilla Excel, generación de boletas, impresión/PDF y flujo de envío por correo
+- `/empleados` — Directorio de empleados: importar desde Excel o agregar manualmente uno por uno con el botón "+ Agregar"
+- `/login` — Inicio de sesión
+- `/set-password` — Establecer/restablecer contraseña
+
+### API Routes
+
+- `POST /api/employees` — Crear empleados (individual o masivo)
+- `GET /api/employees` — Listar empleados (filtro opcional por empresa)
+- `PATCH /api/employees` — Actualizar correo o estado activo/inactivo
+- `DELETE /api/employees?id=...` — Eliminar empleado
+- `POST /api/send-receipt-email` — Enviar boleta por correo con PDF adjunto vía Resend
+
 ## Tecnologías
 
 - [Next.js 14](https://nextjs.org/) (App Router)
 - [Supabase](https://supabase.com/) (Auth, Database, Storage)
 - [Tailwind CSS](https://tailwindcss.com/)
 - [SheetJS (xlsx)](https://sheetjs.com/) para parsing de Excel
+- [Resend](https://resend.com/) para envío de correos
+- [jsPDF](https://github.com/parallax/jsPDF) + [html2canvas](https://html2canvas.hertzen.com/) para generación de PDF
 
 ## Licencia
 
