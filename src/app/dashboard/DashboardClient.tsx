@@ -106,14 +106,12 @@ export function DashboardClient({ user }: DashboardClientProps) {
     <>
       <header className="bg-primary px-6 py-6">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
-          <div>
-            <Link href="/" className="block text-white hover:opacity-90 transition-opacity w-fit">
-              <Logo className="text-white" iconSize={24} />
-            </Link>
+          <Link href="/dashboard" className="block text-white hover:opacity-90 transition-opacity w-fit">
+            <Logo className="text-white" iconSize={24} />
             <p className="mt-1 text-[13px] text-white/70">
               Cargue planilla Excel → Genere boletas → Imprima PDF
             </p>
-          </div>
+          </Link>
           <div className="flex items-center gap-3">
             <Link
               href="/empleados"

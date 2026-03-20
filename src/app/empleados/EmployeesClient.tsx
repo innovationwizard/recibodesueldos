@@ -35,6 +35,10 @@ export function EmployeesClient({ user }: EmployeesClientProps) {
   const [editEmail, setEditEmail] = useState("");
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({ fullName: "", email: "", companyName: "" });
+  const [addSaving, setAddSaving] = useState(false);
+  const [addError, setAddError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchEmployees = useCallback(async () => {
@@ -156,6 +160,37 @@ export function EmployeesClient({ user }: EmployeesClientProps) {
     if (res.ok) fetchEmployees();
   };
 
+  const handleAddEmployee = async () => {
+    const { fullName, email, companyName } = addForm;
+    if (!fullName.trim() || !email.trim() || !companyName.trim()) {
+      setAddError("Todos los campos son obligatorios");
+      return;
+    }
+    setAddSaving(true);
+    setAddError("");
+    try {
+      const res = await fetch("/api/employees", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employees: [{ fullName: fullName.trim(), email: email.trim(), companyName: companyName.trim() }],
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        setAddError(result.error + (result.details ? ": " + result.details.join(", ") : ""));
+      } else {
+        setShowAddModal(false);
+        setAddForm({ fullName: "", email: "", companyName: "" });
+        fetchEmployees();
+      }
+    } catch (err) {
+      setAddError((err as Error).message);
+    } finally {
+      setAddSaving(false);
+    }
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     window.location.href = "/";
@@ -172,14 +207,12 @@ export function EmployeesClient({ user }: EmployeesClientProps) {
     <>
       <header className="bg-primary px-6 py-6">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
-          <div>
-            <Link href="/dashboard" className="block text-white hover:opacity-90 transition-opacity w-fit">
-              <Logo className="text-white" iconSize={24} />
-            </Link>
+          <Link href="/dashboard" className="block text-white hover:opacity-90 transition-opacity w-fit">
+            <Logo className="text-white" iconSize={24} />
             <p className="mt-1 text-[13px] text-white/70">
               Directorio de empleados
             </p>
-          </div>
+          </Link>
           <div className="flex items-center gap-3">
             <Link
               href="/dashboard"
@@ -334,18 +367,26 @@ export function EmployeesClient({ user }: EmployeesClientProps) {
             <h2 className="text-base font-semibold text-primary">
               Directorio ({activeCount} activos de {filtered.length})
             </h2>
-            {companies.length > 1 && (
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-primary"
+            <div className="flex items-center gap-2">
+              {companies.length > 1 && (
+                <select
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-primary"
+                >
+                  <option value="">Todas las empresas</option>
+                  {companies.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              )}
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-light"
               >
-                <option value="">Todas las empresas</option>
-                {companies.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            )}
+                + Agregar
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -437,6 +478,83 @@ export function EmployeesClient({ user }: EmployeesClientProps) {
             </div>
           )}
         </div>
+        {/* Add employee modal */}
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+              <h3 className="mb-4 text-base font-semibold text-primary">Agregar empleado</h3>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Nombre completo</label>
+                  <input
+                    type="text"
+                    value={addForm.fullName}
+                    onChange={(e) => setAddForm({ ...addForm, fullName: e.target.value })}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-primary"
+                    placeholder="Juan Pérez"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Correo electrónico</label>
+                  <input
+                    type="email"
+                    value={addForm.email}
+                    onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-primary"
+                    placeholder="juan@empresa.com"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-gray-600">Empresa</label>
+                  {companies.length > 0 ? (
+                    <select
+                      value={addForm.companyName}
+                      onChange={(e) => setAddForm({ ...addForm, companyName: e.target.value })}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-primary"
+                    >
+                      <option value="">Seleccione empresa</option>
+                      {companies.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={addForm.companyName}
+                      onChange={(e) => setAddForm({ ...addForm, companyName: e.target.value })}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-primary"
+                      placeholder="Nombre de la empresa"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {addError && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+                  {addError}
+                </div>
+              )}
+
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  onClick={() => { setShowAddModal(false); setAddError(""); setAddForm({ fullName: "", email: "", companyName: "" }); }}
+                  className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleAddEmployee}
+                  disabled={addSaving}
+                  className="rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white hover:bg-primary-light disabled:opacity-50"
+                >
+                  {addSaving ? "Guardando..." : "Guardar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </>
   );
