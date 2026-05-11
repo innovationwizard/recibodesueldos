@@ -68,6 +68,7 @@ export function DashboardClient({ user }: DashboardClientProps) {
           salary: r.salario,
           bonus: 0,
           special_bonus: r.bonificacionEspecial,
+          retroactivo: r.retroactivo,
           igss: r.igss,
           isr: r.isr,
           advance: r.anticipo,

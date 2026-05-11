@@ -88,6 +88,7 @@ const FIELD_TARGETS: { key: string; targets: string[]; multi?: boolean; exclude?
   { key: "puesto", targets: ["puesto"] },
   { key: "salario", targets: ["salario base devengado en el mes"] },
   { key: "bonificacionEspecial", targets: ["bonificacion decreto"], multi: true, exclude: ["diaria", "devengada", "especial", "incentivo"] },
+  { key: "retroactivo", targets: ["retroactivo salarial", "retroactivo"] },
   { key: "igss", targets: ["igss"] },
   { key: "isr", targets: ["isr"] },
   { key: "anticipo", targets: ["anticipo 1ra quincena", "anticipo"] },
@@ -170,6 +171,7 @@ export interface ReceiptData {
   salario: number;
   bonificacion: number;
   bonificacionEspecial: number;
+  retroactivo: number;
   igss: number;
   isr: number;
   anticipo: number;
@@ -257,11 +259,12 @@ export function parseWorkbook(workbook: XLSX.WorkBook, sheetName: string): Parse
 
     const salario = toNum(val("salario"));
     const bonificacionEspecial = toNum(val("bonificacionEspecial"));
+    const retroactivo = toNum(val("retroactivo"));
     const igss = toNum(val("igss"));
     const isr = toNum(val("isr"));
     const anticipo = toNum(val("anticipo"));
     const otros = toNum(val("otros"));
-    const totalIngresos = salario + bonificacionEspecial;
+    const totalIngresos = salario + bonificacionEspecial + retroactivo;
     const totalDescuentos = igss + isr + anticipo + otros;
 
     receipts.push({
@@ -274,6 +277,7 @@ export function parseWorkbook(workbook: XLSX.WorkBook, sheetName: string): Parse
       salario,
       bonificacion: 0,
       bonificacionEspecial,
+      retroactivo,
       igss,
       isr,
       anticipo,

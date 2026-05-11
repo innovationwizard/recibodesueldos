@@ -74,6 +74,14 @@ export function Receipt({ data, isSecondOnPage = false }: ReceiptProps) {
                   Q {fmt(data.bonificacionEspecial)}
                 </span>
               </div>
+              {data.retroactivo > 0 && (
+                <div className="line-item flex justify-between px-0.5 text-[9.5px] leading-[1.8]">
+                  <span>Retroactivo Salarial</span>
+                  <span className="amount min-w-[70px] text-right tabular-nums">
+                    Q {fmt(data.retroactivo)}
+                  </span>
+                </div>
+              )}
               <div className="total-line line-item mt-0.5 flex justify-between border-t border-gray-500 px-0.5 pt-0.5 text-[9.5px] font-bold leading-[1.8]">
                 <span>TOTAL INGRESOS</span>
                 <span className="amount min-w-[70px] text-right tabular-nums">
