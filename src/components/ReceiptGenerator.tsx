@@ -2,8 +2,8 @@
 
 import { useState, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
-import { fuzzyMatch, parseWorkbook, readWorkbookFromArrayBuffer } from "@/lib/excel-parser";
-import type { ReceiptData } from "@/lib/excel-parser";
+import { detectFormat, fuzzyMatch, parseWorkbook, readWorkbookFromArrayBuffer } from "@/lib/excel-parser";
+import type { FormatId, ReceiptData } from "@/lib/excel-parser";
 import { Receipt } from "./Receipt";
 import { getPrintCSS } from "@/lib/print-css";
 import { generateSingleReceiptPdf, getReceiptHtml, receiptFileName } from "@/lib/pdf-generator";
@@ -12,6 +12,7 @@ import { EmailFlow } from "./email/EmailFlow";
 
 const STEPS = {
   UPLOAD: "upload",
+  FORMAT_PICK: "format_pick",
   SHEET_SELECT: "sheet_select",
   SHEET_CONFIRM: "sheet_confirm",
   PROCESSING: "processing",
@@ -43,6 +44,10 @@ export function ReceiptGenerator({ onSuccess, onReset, batchId, receiptIds }: Re
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [exporting, setExporting] = useState(false);
   const [showEmailFlow, setShowEmailFlow] = useState(false);
+  const [detectedFormatId, setDetectedFormatId] = useState<FormatId | null>(null);
+  const [detectedFormatLabel, setDetectedFormatLabel] = useState<string | null>(null);
+  const [detectedSheet, setDetectedSheet] = useState<string | null>(null);
+  const [manualFormatId, setManualFormatId] = useState<FormatId | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -64,7 +69,18 @@ export function ReceiptGenerator({ onSuccess, onReset, batchId, receiptIds }: Re
           setWorkbook(wb);
           setSheetNames(wb.SheetNames);
           addLog(`Hojas encontradas: ${wb.SheetNames.join(", ")}`);
-          setStep(STEPS.SHEET_SELECT);
+
+          const det = detectFormat(wb);
+          if (det) {
+            setDetectedFormatId(det.formatId);
+            setDetectedFormatLabel(det.formatLabel);
+            setDetectedSheet(det.sheet);
+            addLog(`Formato detectado: ${det.formatLabel} (hoja "${det.sheet}")`);
+            setStep(STEPS.SHEET_CONFIRM);
+          } else {
+            addLog(`Formato no reconocido — selección manual`);
+            setStep(STEPS.FORMAT_PICK);
+          }
         } catch (err) {
           setErrorMsg(`Error al leer archivo: ${(err as Error).message}`);
           setStep(STEPS.ERROR);
@@ -93,13 +109,27 @@ export function ReceiptGenerator({ onSuccess, onReset, batchId, receiptIds }: Re
   }, [sheetInput, sheetNames, addLog]);
 
   const handleConfirm = useCallback(() => {
-    if (!matchedSheet || !workbook) return;
+    if (!workbook) return;
+
+    const formatId = manualFormatId ?? detectedFormatId;
+    let sheetName: string | undefined;
+    if (manualFormatId === "mensual") sheetName = matchedSheet ?? undefined;
+    else if (manualFormatId === "catorcenal") sheetName = "MENU";
+    else sheetName = detectedSheet ?? undefined;
+
+    if (!formatId) {
+      setErrorMsg("No se determinó el formato. Reinicia e intenta de nuevo.");
+      setStep(STEPS.ERROR);
+      return;
+    }
+
     setStep(STEPS.PROCESSING);
-    addLog(`Procesando hoja: "${matchedSheet}"`);
+    addLog(`Procesando: formato "${formatId}", hoja "${sheetName ?? "<auto>"}"`);
 
     try {
       const { receipts: parsedReceipts, companyName, dateRange, warnings } = parseWorkbook(
-        workbook
+        workbook,
+        { formatId, sheetName }
       );
       for (const w of warnings) addLog(`⚠ ${w}`);
       addLog(`Empleados procesados: ${parsedReceipts.length}`);
@@ -110,7 +140,16 @@ export function ReceiptGenerator({ onSuccess, onReset, batchId, receiptIds }: Re
       setErrorMsg((err as Error).message);
       setStep(STEPS.ERROR);
     }
-  }, [matchedSheet, workbook, addLog, onSuccess, uploadedFile]);
+  }, [
+    workbook,
+    manualFormatId,
+    detectedFormatId,
+    detectedSheet,
+    matchedSheet,
+    addLog,
+    onSuccess,
+    uploadedFile,
+  ]);
 
   const handlePrint = () => {
     const printContent = printRef.current;
@@ -173,17 +212,29 @@ export function ReceiptGenerator({ onSuccess, onReset, batchId, receiptIds }: Re
     setLogs([]);
     setUploadedFile(null);
     setShowEmailFlow(false);
+    setDetectedFormatId(null);
+    setDetectedFormatLabel(null);
+    setDetectedSheet(null);
+    setManualFormatId(null);
     onReset?.();
   };
 
-  const stepOrder = [STEPS.UPLOAD, STEPS.SHEET_SELECT, STEPS.SHEET_CONFIRM, STEPS.DONE];
-  const currentIdx = stepOrder.indexOf(step as (typeof stepOrder)[number]);
+  // Multiple internal steps map to the same progress index.
+  const STEP_INDEX: Record<string, number> = {
+    [STEPS.UPLOAD]: 0,
+    [STEPS.FORMAT_PICK]: 1,
+    [STEPS.SHEET_SELECT]: 1,
+    [STEPS.SHEET_CONFIRM]: 2,
+    [STEPS.PROCESSING]: 2,
+    [STEPS.DONE]: 3,
+  };
+  const currentIdx = STEP_INDEX[step] ?? -1;
 
   return (
     <div className="space-y-6">
       {/* Progress */}
       <div className="flex flex-wrap items-center gap-1">
-        {["Cargar Archivo", "Seleccionar Hoja", "Confirmar", "Boletas"].map(
+        {["Cargar Archivo", "Detectar Formato", "Confirmar", "Boletas"].map(
           (label, i) => {
             const isActive = i <= currentIdx && step !== STEPS.ERROR;
             const isCurrent = i === currentIdx;
@@ -285,18 +336,82 @@ export function ReceiptGenerator({ onSuccess, onReset, batchId, receiptIds }: Re
         </div>
       )}
 
+      {/* Step: Format Pick (manual fallback) */}
+      {step === STEPS.FORMAT_PICK && (
+        <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+          <h2 className="mb-1.5 text-base font-semibold text-primary">
+            Selecciona el formato de la planilla
+          </h2>
+          <p className="mb-4 text-[13px] text-gray-600">
+            No pudimos detectar el formato automáticamente. ¿Cuál de estos es?
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                setManualFormatId("mensual");
+                setStep(STEPS.SHEET_SELECT);
+                setSheetInput("");
+                setErrorMsg("");
+                addLog("Formato manual: Mensual");
+              }}
+              className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-light"
+            >
+              Mensual
+            </button>
+            <button
+              onClick={() => {
+                setManualFormatId("catorcenal");
+                setMatchedSheet("MENU");
+                setStep(STEPS.SHEET_CONFIRM);
+                addLog("Formato manual: Catorcenal (hoja MENU)");
+              }}
+              className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-light"
+            >
+              Catorcenal (IGSS)
+            </button>
+          </div>
+          <p className="mt-3 text-[12px] text-gray-500">
+            Hojas en el archivo: {sheetNames.join(", ")}
+          </p>
+        </div>
+      )}
+
       {/* Step: Sheet Confirm */}
       {step === STEPS.SHEET_CONFIRM && (
         <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-          <h2 className="mb-1.5 text-base font-semibold text-primary">
-            Confirmar hoja seleccionada
-          </h2>
-          <div className="mb-4 flex items-center gap-2 rounded-lg bg-gray-50 px-4 py-3.5">
-            <span className="text-[13px] text-gray-600">Hoja encontrada:</span>
-            <span className="text-[15px] font-semibold text-primary">
-              &quot;{matchedSheet}&quot;
-            </span>
-          </div>
+          {detectedFormatId && !manualFormatId ? (
+            <>
+              <h2 className="mb-1.5 text-base font-semibold text-primary">
+                Formato detectado
+              </h2>
+              <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-green-600 shrink-0">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span className="text-[14px] font-semibold text-green-800">
+                  {detectedFormatLabel}
+                </span>
+                <span className="text-[13px] text-green-700">
+                  · Hoja: <span className="font-mono">{detectedSheet}</span>
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="mb-1.5 text-base font-semibold text-primary">
+                Confirmar selección
+              </h2>
+              <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-gray-50 px-4 py-3.5">
+                <span className="text-[13px] text-gray-600">Formato manual:</span>
+                <span className="text-[14px] font-semibold text-primary">
+                  {manualFormatId === "catorcenal" ? "Catorcenal (IGSS)" : "Mensual"}
+                </span>
+                <span className="text-[13px] text-gray-600">
+                  · Hoja: <span className="font-mono">&quot;{matchedSheet}&quot;</span>
+                </span>
+              </div>
+            </>
+          )}
           <div className="flex flex-wrap gap-2">
             <button
               onClick={handleConfirm}
@@ -306,13 +421,18 @@ export function ReceiptGenerator({ onSuccess, onReset, batchId, receiptIds }: Re
             </button>
             <button
               onClick={() => {
-                setStep(STEPS.SHEET_SELECT);
+                setDetectedFormatId(null);
+                setDetectedFormatLabel(null);
+                setDetectedSheet(null);
+                setManualFormatId(null);
+                setMatchedSheet(null);
                 setSheetInput("");
                 setErrorMsg("");
+                setStep(STEPS.FORMAT_PICK);
               }}
               className="rounded-lg border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-100"
             >
-              Buscar otra hoja
+              Cambiar formato
             </button>
           </div>
         </div>

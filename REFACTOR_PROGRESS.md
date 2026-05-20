@@ -8,8 +8,8 @@ Started: 2026-05-20
 
 ## Status
 
-- **Current batch**: B complete — awaiting go-ahead for C
-- **Last completed**: B1
+- **Current batch**: C complete — awaiting go-ahead for D (your manual testing)
+- **Last completed**: C5 (tsc clean)
 - **Blockers**: none
 
 ---
@@ -36,10 +36,10 @@ Touches only [`src/lib/excel-parser.ts`](src/lib/excel-parser.ts). After this ba
 
 Touches only [`src/components/ReceiptGenerator.tsx`](src/components/ReceiptGenerator.tsx).
 
-- [ ] **C1.** Add `DETECTING` to `STEPS` enum. Add state: `detectedFormatLabel: string | null`, `detectedSheet: string | null`.
-- [ ] **C2.** In `handleFileUpload`, after `readWorkbookFromArrayBuffer`, call `detectFormat(wb)`. On match → set state, jump to `SHEET_CONFIRM`. On miss → jump to `SHEET_SELECT` with friendly message.
-- [ ] **C3.** In `SHEET_CONFIRM` view, when `detectedFormatLabel` set, render banner above existing confirm card: `✓ Formato detectado: <label> — Hoja: <sheet>`. "Buscar otra hoja" button still drops to manual `SHEET_SELECT`.
-- [ ] **C4.** In `handleConfirm`, call `parseWorkbook(workbook)` (auto-detect path) when banner is shown, or `mensualAdapter.parse(workbook, matchedSheet)` (manual override path). Show parse error if either throws.
+- [x] **C1.** Added `FORMAT_PICK` to `STEPS` (not `DETECTING` — detection is synchronous, no ephemeral step needed). Added 4 new state slots: `detectedFormatId`, `detectedFormatLabel`, `detectedSheet`, `manualFormatId`.
+- [x] **C2.** `handleFileUpload` now calls `detectFormat(wb)` after read. On match → store + jump to `SHEET_CONFIRM`. On miss → jump to `FORMAT_PICK`.
+- [x] **C3.** `SHEET_CONFIRM` now renders two variants: green "Formato detectado" banner for auto-detect path, gray "Formato manual" card for manual path. New `FORMAT_PICK` step has Mensual / Catorcenal buttons. Mensual → drops to `SHEET_SELECT`. Catorcenal → sets `matchedSheet="MENU"` and jumps to `SHEET_CONFIRM`. Progress indicator label changed from "Seleccionar Hoja" to "Detectar Formato"; index map handles all internal steps.
+- [x] **C4.** `handleConfirm` resolves `(formatId, sheetName)` from state and calls `parseWorkbook(wb, { formatId, sheetName })`. `reset()` clears all new state slots.
 
 ### Batch D — Manual smoke tests (user-driven)
 
