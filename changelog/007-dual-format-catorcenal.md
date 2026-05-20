@@ -38,10 +38,12 @@ existente.
 
 ## Boletas
 
-- La linea **Anticipo 1ra Quincena** ahora se oculta cuando el valor
-  es Q 0 (mismo patron que ya tenia Retroactivo Salarial). En las
-  boletas catorcenales nunca aparece. En las mensuales se sigue
-  mostrando para empleados con anticipo > 0.
+- La linea **Anticipo 1ra Quincena** se muestra siempre en las
+  boletas del formato mensual (incluso si el valor es Q 0) y no
+  aparece nunca en las catorcenales (el formato no tiene quincena).
+- **Envio por correo** queda deshabilitado para lotes catorcenales.
+  Solo aplica al formato mensual. Las opciones "Exportar juntos" y
+  "Exportar separados" siguen disponibles para ambos formatos.
 
 ## Arquitectura
 

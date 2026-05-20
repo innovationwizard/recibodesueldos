@@ -493,8 +493,13 @@ export function ReceiptGenerator({ onSuccess, onReset, batchId, receiptIds }: Re
                 </button>
                 <button
                   onClick={() => setShowEmailFlow(true)}
-                  disabled={exporting || !batchId}
-                  className="rounded-lg border border-primary bg-white px-5 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/5 disabled:opacity-50"
+                  disabled={exporting || !batchId || receipts[0]?.formatId === "catorcenal"}
+                  title={
+                    receipts[0]?.formatId === "catorcenal"
+                      ? "Envío por correo no disponible para planillas catorcenales"
+                      : undefined
+                  }
+                  className="rounded-lg border border-primary bg-white px-5 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Enviar por correo
                 </button>

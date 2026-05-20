@@ -106,7 +106,7 @@ export function Receipt({ data, isSecondOnPage = false }: ReceiptProps) {
                   Q {fmt(data.isr)}
                 </span>
               </div>
-              {data.anticipo > 0 && (
+              {data.formatId === "mensual" && (
                 <div className="line-item flex justify-between px-0.5 text-[9.5px] leading-[1.8]">
                   <span>Anticipo 1ra Quincena</span>
                   <span className="amount min-w-[70px] text-right tabular-nums">

@@ -86,6 +86,7 @@ export type FormatId = "mensual" | "catorcenal";
 
 export interface ReceiptData {
   ordinal: number;
+  formatId: FormatId;
   companyName: string;
   dateRange: string;
   receiptDate: string;
@@ -297,6 +298,7 @@ export const mensualAdapter: FormatAdapter = {
 
       receipts.push({
         ordinal: ordNum,
+        formatId: "mensual",
         companyName,
         dateRange: dateRangeRaw.trim(),
         receiptDate: parseLastDate(dateRangeRaw),
@@ -399,6 +401,7 @@ export const catorcenalAdapter: FormatAdapter = {
 
       receipts.push({
         ordinal: ordNum,
+        formatId: "catorcenal",
         companyName,
         dateRange,
         receiptDate: parseLastDate(dateRange),

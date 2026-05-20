@@ -62,9 +62,17 @@ Run `npm run dev` and verify each in the browser.
 
 | Topic | Decision |
 |---|---|
-| Anticipo line when value is 0/absent | Hide |
+| Anticipo line — mensual | **Always show** (even when Q 0). Revised post-Batch B per user. |
+| Anticipo line — catorcenal | Hide (concept doesn't exist) |
 | Source-provided totals (catorcenal cols Q, R) | Ignore — always compute |
 | Format selection UX | Auto-detect with confirmation banner |
+| Email send — catorcenal | **Disabled.** Post-implementation tweak. |
+
+## Post-implementation tweaks (2026-05-20)
+
+- Added `formatId` to `ReceiptData` so Receipt and ReceiptGenerator can branch on format.
+- [`Receipt.tsx`](src/components/Receipt.tsx): Anticipo line conditional changed from `data.anticipo > 0` → `data.formatId === "mensual"`. Reverts hide-when-zero for mensual; keeps hidden for catorcenal (always 0 anyway).
+- [`ReceiptGenerator.tsx`](src/components/ReceiptGenerator.tsx): "Enviar por correo" button disabled when `receipts[0]?.formatId === "catorcenal"`, with explanatory `title` tooltip.
 
 ---
 
