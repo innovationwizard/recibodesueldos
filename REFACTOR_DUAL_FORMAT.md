@@ -1,5 +1,9 @@
 # Refactor: Dual-Format XLSX Support
 
+> **Status: implemented.** Plan produced 2026-05-20, code landed 2026-05-20 across three commits on `main`.
+> User-facing summary: [`changelog/007-dual-format-catorcenal.md`](changelog/007-dual-format-catorcenal.md).
+> Implementation log: [`REFACTOR_PROGRESS.md`](REFACTOR_PROGRESS.md).
+
 Findings and design plan for adding a second xlsx format (catorcenal IGSS) alongside the existing mensual+quincenal format. Produced 2026-05-20.
 
 Sample files referenced:

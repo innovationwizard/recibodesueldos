@@ -8,9 +8,9 @@ Started: 2026-05-20
 
 ## Status
 
-- **Current batch**: C complete — awaiting go-ahead for D (your manual testing)
-- **Last completed**: C5 (tsc clean)
-- **Blockers**: none
+- **Current batch**: E complete — refactor done
+- **Last completed**: E2
+- **Blockers**: none. Batch D (manual smoke tests) is on the user to run; checkboxes left open until verified.
 
 ---
 
@@ -53,8 +53,8 @@ Run `npm run dev` and verify each in the browser.
 
 ### Batch E — Changelog & doc finalization
 
-- [ ] **E1.** Add `changelog/007-dual-format-catorcenal.md` documenting the user-visible changes (auto-detect, banner, hidden zero lines, new format support).
-- [ ] **E2.** At the top of [`REFACTOR_DUAL_FORMAT.md`](REFACTOR_DUAL_FORMAT.md), note completion date and link to changelog 007.
+- [x] **E1.** Added [`changelog/007-dual-format-catorcenal.md`](changelog/007-dual-format-catorcenal.md) documenting user-visible changes.
+- [x] **E2.** Stamped [`REFACTOR_DUAL_FORMAT.md`](REFACTOR_DUAL_FORMAT.md) as `Status: implemented` at the top, with links to changelog and progress log.
 
 ---
 
