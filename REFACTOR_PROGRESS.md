@@ -8,8 +8,8 @@ Started: 2026-05-20
 
 ## Status
 
-- **Current batch**: A complete — awaiting go-ahead for B
-- **Last completed**: A5 (tsc clean)
+- **Current batch**: B complete — awaiting go-ahead for C
+- **Last completed**: B1
 - **Blockers**: none
 
 ---
@@ -30,7 +30,7 @@ Touches only [`src/lib/excel-parser.ts`](src/lib/excel-parser.ts). After this ba
 
 ### Batch B — Receipt component (1-line UI tweak)
 
-- [ ] **B1.** In [`src/components/Receipt.tsx`](src/components/Receipt.tsx), wrap the Anticipo line (lines 109–114) with `{data.anticipo > 0 && (...)}`, mirroring the existing `retroactivo` pattern (lines 77–84).
+- [x] **B1.** In [`src/components/Receipt.tsx`](src/components/Receipt.tsx), wrap the Anticipo line with `{data.anticipo > 0 && (...)}`, mirroring the existing `retroactivo` pattern.
 
 ### Batch C — ReceiptGenerator flow (auto-detect + banner)
 

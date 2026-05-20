@@ -106,12 +106,14 @@ export function Receipt({ data, isSecondOnPage = false }: ReceiptProps) {
                   Q {fmt(data.isr)}
                 </span>
               </div>
-              <div className="line-item flex justify-between px-0.5 text-[9.5px] leading-[1.8]">
-                <span>Anticipo 1ra Quincena</span>
-                <span className="amount min-w-[70px] text-right tabular-nums">
-                  Q {fmt(data.anticipo)}
-                </span>
-              </div>
+              {data.anticipo > 0 && (
+                <div className="line-item flex justify-between px-0.5 text-[9.5px] leading-[1.8]">
+                  <span>Anticipo 1ra Quincena</span>
+                  <span className="amount min-w-[70px] text-right tabular-nums">
+                    Q {fmt(data.anticipo)}
+                  </span>
+                </div>
+              )}
               <div className="line-item flex justify-between px-0.5 text-[9.5px] leading-[1.8]">
                 <span>Otros</span>
                 <span className="amount min-w-[70px] text-right tabular-nums">
