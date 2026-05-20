@@ -99,8 +99,7 @@ export function ReceiptGenerator({ onSuccess, onReset, batchId, receiptIds }: Re
 
     try {
       const { receipts: parsedReceipts, companyName, dateRange, warnings } = parseWorkbook(
-        workbook,
-        matchedSheet
+        workbook
       );
       for (const w of warnings) addLog(`⚠ ${w}`);
       addLog(`Empleados procesados: ${parsedReceipts.length}`);

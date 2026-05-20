@@ -39,6 +39,9 @@ Generador de boletas de pago (constancias de pago) desde planillas Excel. Aplica
      1. `supabase/migrations/20240218000001_initial_schema.sql`
      2. `supabase/migrations/20240218000002_storage.sql`
      3. `supabase/migrations/20240218000003_special_bonus.sql`
+     4. `supabase/migrations/20240218000004_email_logs.sql`
+     5. `supabase/migrations/20240218000005_employees.sql`
+     6. `supabase/migrations/20240218000006_retroactivo.sql`
    - Si el bucket no existe, créalo manualmente en Storage → New bucket: `planillas` (privado, 10 MB)
    - En Authentication → URL Configuration, agrega:
      - Site URL: `http://localhost:3000` (desarrollo) o tu URL de producción

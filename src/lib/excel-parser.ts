@@ -23,7 +23,7 @@ function levenshtein(a: string, b: string): number {
 export function norm(s: unknown): string {
   return String(s ?? "")
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/\./g, "")
     .replace(/\s+/g, " ")
     .trim()
@@ -71,7 +71,7 @@ const MONTHS_ES: Record<string, string> = {
 function parseLastDate(rangeStr: string): string {
   if (!rangeStr) return "";
   const s = String(rangeStr).trim();
-  const m = s.match(/AL\s+(\d{1,2})\s+(?:DE\s+)?(\w+)\s+(\d{4})/i);
+  const m = s.match(/AL\s+(\d{1,2})\s+(?:DE\s+)?(\w+)\s+(?:DEL?\s+)?(\d{4})/i);
   if (m) {
     const day = parseInt(m[1], 10);
     const month = MONTHS_ES[m[2].toLowerCase()] || m[2].toLowerCase();
@@ -80,7 +80,49 @@ function parseLastDate(rangeStr: string): string {
   return s;
 }
 
-// ─── Column Discovery ────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export type FormatId = "mensual" | "catorcenal";
+
+export interface ReceiptData {
+  ordinal: number;
+  companyName: string;
+  dateRange: string;
+  receiptDate: string;
+  nombre: string;
+  puesto: string;
+  salario: number;
+  bonificacion: number;
+  bonificacionEspecial: number;
+  retroactivo: number;
+  igss: number;
+  isr: number;
+  anticipo: number;
+  otros: number;
+  totalIngresos: number;
+  totalDescuentos: number;
+  liquido: number;
+}
+
+export interface ParseResult {
+  receipts: ReceiptData[];
+  companyName: string;
+  dateRange: string;
+  formatId: FormatId;
+  formatLabel: string;
+  dataSheetName: string;
+  warnings: string[];
+}
+
+interface FormatAdapter {
+  id: FormatId;
+  label: string;
+  /** Returns the data-sheet name if this adapter recognizes the workbook. */
+  detect(wb: XLSX.WorkBook): { matched: true; sheet: string } | { matched: false };
+  parse(wb: XLSX.WorkBook, sheet: string): ParseResult;
+}
+
+// ─── Mensual adapter (old format: ENCABEZADO marker in col A) ────────────────
 
 const FIELD_TARGETS: { key: string; targets: string[]; multi?: boolean; exclude?: string[] }[] = [
   { key: "ordinal", targets: ["no.", "no", "num", "número"] },
@@ -108,7 +150,9 @@ function cellMatches(cellVal: string, target: string): boolean {
 
 /** Scan column A for rows marked with "ENCABEZADO" */
 function findHeaderRows(sheet: XLSX.WorkSheet): number[] {
-  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+  const ref = sheet["!ref"];
+  if (!ref) return [];
+  const range = XLSX.utils.decode_range(ref);
   const rows: number[] = [];
   for (let r = range.s.r; r <= Math.min(range.e.r, 30); r++) {
     const cell = sheet[XLSX.utils.encode_cell({ r, c: 0 })];
@@ -159,140 +203,289 @@ function discoverColumns(sheet: XLSX.WorkSheet, headerRows: number[]): Record<st
   return colMap;
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+export const mensualAdapter: FormatAdapter = {
+  id: "mensual",
+  label: "Planilla mensual",
 
-export interface ReceiptData {
-  ordinal: number;
-  companyName: string;
-  dateRange: string;
-  receiptDate: string;
-  nombre: string;
-  puesto: string;
-  salario: number;
-  bonificacion: number;
-  bonificacionEspecial: number;
-  retroactivo: number;
-  igss: number;
-  isr: number;
-  anticipo: number;
-  otros: number;
-  totalIngresos: number;
-  totalDescuentos: number;
-  liquido: number;
-}
-
-export interface ParseResult {
-  receipts: ReceiptData[];
-  companyName: string;
-  dateRange: string;
-  warnings: string[];
-}
-
-// ─── Main Parser ─────────────────────────────────────────────────────────────
-
-export function parseWorkbook(workbook: XLSX.WorkBook, sheetName: string): ParseResult {
-  const sheet = workbook.Sheets[sheetName];
-  if (!sheet) throw new Error(`Hoja "${sheetName}" no encontrada`);
-
-  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
-  const companyName = String(sheet["B2"]?.v ?? "").trim();
-  const dateRangeRaw = String(sheet["B4"]?.v ?? "").trim();
-
-  const headerRows = findHeaderRows(sheet);
-  if (headerRows.length === 0) {
-    throw new Error('No se encontraron filas marcadas con "ENCABEZADO" en la columna A');
-  }
-
-  const colMap = discoverColumns(sheet, headerRows);
-  const warnings: string[] = [];
-
-  // Warn on duplicate column assignments
-  const colToFields: Record<number, string[]> = {};
-  for (const [field, col] of Object.entries(colMap)) {
-    for (const c of Array.isArray(col) ? col : [col]) {
-      (colToFields[c] ??= []).push(field);
-    }
-  }
-  for (const [col, fields] of Object.entries(colToFields)) {
-    if (fields.length > 1) {
-      warnings.push(`Columna ${XLSX.utils.encode_col(Number(col))} asignada a múltiples campos: ${fields.join(", ")}`);
-    }
-  }
-
-  const required = ["ordinal", "nombre", "puesto", "salario"];
-  const missing = required.filter((k) => colMap[k] === undefined);
-  if (missing.length > 0) {
-    throw new Error(`Columnas requeridas no encontradas: ${missing.join(", ")}`);
-  }
-
-  // First data row: right after last header, skip blanks in ordinal column
-  const ordCol = colMap.ordinal as number;
-  let firstDataRow = Math.max(...headerRows) + 1;
-  for (let r = firstDataRow; r <= firstDataRow + 5; r++) {
-    const v = sheet[XLSX.utils.encode_cell({ r, c: ordCol })]?.v;
-    if (v != null && (typeof v === "number" || !isNaN(parseFloat(String(v))))) {
-      firstDataRow = r;
-      break;
-    }
-  }
-
-  const receipts: ReceiptData[] = [];
-
-  for (let r = firstDataRow; r <= range.e.r; r++) {
-    const ordVal = sheet[XLSX.utils.encode_cell({ r, c: ordCol })]?.v;
-    if (ordVal == null) continue;
-    const ordNum = typeof ordVal === "number" ? ordVal : parseFloat(String(ordVal));
-    if (isNaN(ordNum)) continue;
-
-    const nameCol = colMap.nombre as number;
-    const nameVal = sheet[XLSX.utils.encode_cell({ r, c: nameCol })]?.v;
-    if (!nameVal || norm(nameVal).length < 2) continue;
-
-    const val = (key: string): unknown => {
-      const col = colMap[key];
-      if (col === undefined) return 0;
-      if (Array.isArray(col)) {
-        return col.reduce((sum, c) => sum + toNum(sheet[XLSX.utils.encode_cell({ r, c })]?.v ?? 0), 0);
+  detect(wb) {
+    for (const name of wb.SheetNames) {
+      const sheet = wb.Sheets[name];
+      if (!sheet) continue;
+      if (findHeaderRows(sheet).length > 0) {
+        return { matched: true, sheet: name };
       }
-      return sheet[XLSX.utils.encode_cell({ r, c: col })]?.v ?? 0;
-    };
+    }
+    return { matched: false };
+  },
 
-    const salario = toNum(val("salario"));
-    const bonificacionEspecial = toNum(val("bonificacionEspecial"));
-    const retroactivo = toNum(val("retroactivo"));
-    const igss = toNum(val("igss"));
-    const isr = toNum(val("isr"));
-    const anticipo = toNum(val("anticipo"));
-    const otros = toNum(val("otros"));
-    const totalIngresos = salario + bonificacionEspecial + retroactivo;
-    const totalDescuentos = igss + isr + anticipo + otros;
+  parse(wb, sheetName) {
+    const sheet = wb.Sheets[sheetName];
+    if (!sheet) throw new Error(`Hoja "${sheetName}" no encontrada`);
 
-    receipts.push({
-      ordinal: ordNum,
+    const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+    const companyName = String(sheet["B2"]?.v ?? "").trim();
+    const dateRangeRaw = String(sheet["B4"]?.v ?? "").trim();
+
+    const headerRows = findHeaderRows(sheet);
+    if (headerRows.length === 0) {
+      throw new Error('No se encontraron filas marcadas con "ENCABEZADO" en la columna A');
+    }
+
+    const colMap = discoverColumns(sheet, headerRows);
+    const warnings: string[] = [];
+
+    // Warn on duplicate column assignments
+    const colToFields: Record<number, string[]> = {};
+    for (const [field, col] of Object.entries(colMap)) {
+      for (const c of Array.isArray(col) ? col : [col]) {
+        (colToFields[c] ??= []).push(field);
+      }
+    }
+    for (const [col, fields] of Object.entries(colToFields)) {
+      if (fields.length > 1) {
+        warnings.push(`Columna ${XLSX.utils.encode_col(Number(col))} asignada a múltiples campos: ${fields.join(", ")}`);
+      }
+    }
+
+    const required = ["ordinal", "nombre", "puesto", "salario"];
+    const missing = required.filter((k) => colMap[k] === undefined);
+    if (missing.length > 0) {
+      throw new Error(`Columnas requeridas no encontradas: ${missing.join(", ")}`);
+    }
+
+    // First data row: right after last header, skip blanks in ordinal column
+    const ordCol = colMap.ordinal as number;
+    let firstDataRow = Math.max(...headerRows) + 1;
+    for (let r = firstDataRow; r <= firstDataRow + 5; r++) {
+      const v = sheet[XLSX.utils.encode_cell({ r, c: ordCol })]?.v;
+      if (v != null && (typeof v === "number" || !isNaN(parseFloat(String(v))))) {
+        firstDataRow = r;
+        break;
+      }
+    }
+
+    const receipts: ReceiptData[] = [];
+
+    for (let r = firstDataRow; r <= range.e.r; r++) {
+      const ordVal = sheet[XLSX.utils.encode_cell({ r, c: ordCol })]?.v;
+      if (ordVal == null) continue;
+      const ordNum = typeof ordVal === "number" ? ordVal : parseFloat(String(ordVal));
+      if (isNaN(ordNum)) continue;
+
+      const nameCol = colMap.nombre as number;
+      const nameVal = sheet[XLSX.utils.encode_cell({ r, c: nameCol })]?.v;
+      if (!nameVal || norm(nameVal).length < 2) continue;
+
+      const val = (key: string): unknown => {
+        const col = colMap[key];
+        if (col === undefined) return 0;
+        if (Array.isArray(col)) {
+          return col.reduce((sum, c) => sum + toNum(sheet[XLSX.utils.encode_cell({ r, c })]?.v ?? 0), 0);
+        }
+        return sheet[XLSX.utils.encode_cell({ r, c: col })]?.v ?? 0;
+      };
+
+      const salario = toNum(val("salario"));
+      const bonificacionEspecial = toNum(val("bonificacionEspecial"));
+      const retroactivo = toNum(val("retroactivo"));
+      const igss = toNum(val("igss"));
+      const isr = toNum(val("isr"));
+      const anticipo = toNum(val("anticipo"));
+      const otros = toNum(val("otros"));
+      const totalIngresos = salario + bonificacionEspecial + retroactivo;
+      const totalDescuentos = igss + isr + anticipo + otros;
+
+      receipts.push({
+        ordinal: ordNum,
+        companyName,
+        dateRange: dateRangeRaw.trim(),
+        receiptDate: parseLastDate(dateRangeRaw),
+        nombre: String(nameVal).trim(),
+        puesto: String(val("puesto") || "").trim(),
+        salario,
+        bonificacion: 0,
+        bonificacionEspecial,
+        retroactivo,
+        igss,
+        isr,
+        anticipo,
+        otros,
+        totalIngresos,
+        totalDescuentos,
+        liquido: totalIngresos - totalDescuentos,
+      });
+    }
+
+    if (receipts.length === 0) {
+      throw new Error("No se encontraron filas de datos válidas");
+    }
+
+    return {
+      receipts,
       companyName,
       dateRange: dateRangeRaw.trim(),
-      receiptDate: parseLastDate(dateRangeRaw),
-      nombre: String(nameVal).trim(),
-      puesto: String(val("puesto") || "").trim(),
-      salario,
-      bonificacion: 0,
-      bonificacionEspecial,
-      retroactivo,
-      igss,
-      isr,
-      anticipo,
-      otros,
-      totalIngresos,
-      totalDescuentos,
-      liquido: totalIngresos - totalDescuentos,
-    });
+      formatId: "mensual",
+      formatLabel: "Planilla mensual",
+      dataSheetName: sheetName,
+      warnings,
+    };
+  },
+};
+
+// ─── Catorcenal adapter (new format: MENU sheet + PLANILLA IGSS header) ──────
+
+const CATORCENAL_SHEET = "MENU";
+const CATORCENAL_FIRST_DATA_ROW = 9; // zero-indexed; row 10 in Excel
+const CATORCENAL_COLS = {
+  ordinal: 1,             // B
+  nombre: 2,              // C
+  puesto: 3,              // D
+  salario: 9,             // J — SALARIO DEVENGADO
+  bonifDecretoTotal: 10,  // K
+  bonifDecretoDiaria: 11, // L
+  igss: 13,               // N
+  isr: 14,                // O
+  otros: 15,              // P
+} as const;
+
+export const catorcenalAdapter: FormatAdapter = {
+  id: "catorcenal",
+  label: "Planilla IGSS catorcenal",
+
+  detect(wb) {
+    if (!wb.SheetNames.includes(CATORCENAL_SHEET)) return { matched: false };
+    const sheet = wb.Sheets[CATORCENAL_SHEET];
+    if (!sheet) return { matched: false };
+    const b4 = norm(sheet["B4"]?.v);
+    if (b4.startsWith("planilla igss")) {
+      return { matched: true, sheet: CATORCENAL_SHEET };
+    }
+    return { matched: false };
+  },
+
+  parse(wb, sheetName) {
+    const sheet = wb.Sheets[sheetName];
+    if (!sheet) throw new Error(`Hoja "${sheetName}" no encontrada`);
+
+    const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+    const companyName = String(sheet["B2"]?.v ?? "").trim();
+    const m7 = String(sheet["M7"]?.v ?? "").trim();
+    const b4 = String(sheet["B4"]?.v ?? "").trim();
+    const dateRange = m7 || b4;
+
+    const cell = (r: number, c: number) =>
+      sheet[XLSX.utils.encode_cell({ r, c })]?.v;
+
+    const receipts: ReceiptData[] = [];
+
+    for (let r = CATORCENAL_FIRST_DATA_ROW; r <= range.e.r; r++) {
+      const ordVal = cell(r, CATORCENAL_COLS.ordinal);
+      if (ordVal == null || ordVal === "") continue;
+      const ordNum = typeof ordVal === "number" ? ordVal : parseFloat(String(ordVal));
+      if (isNaN(ordNum)) continue;
+
+      const nameVal = cell(r, CATORCENAL_COLS.nombre);
+      if (!nameVal || norm(nameVal).length < 2) continue;
+
+      const salario = toNum(cell(r, CATORCENAL_COLS.salario));
+      const bonificacionEspecial =
+        toNum(cell(r, CATORCENAL_COLS.bonifDecretoTotal)) +
+        toNum(cell(r, CATORCENAL_COLS.bonifDecretoDiaria));
+      const igss = toNum(cell(r, CATORCENAL_COLS.igss));
+      const isr = toNum(cell(r, CATORCENAL_COLS.isr));
+      const otros = toNum(cell(r, CATORCENAL_COLS.otros));
+      const totalIngresos = salario + bonificacionEspecial;
+      const totalDescuentos = igss + isr + otros;
+
+      receipts.push({
+        ordinal: ordNum,
+        companyName,
+        dateRange,
+        receiptDate: parseLastDate(dateRange),
+        nombre: String(nameVal).trim(),
+        puesto: String(cell(r, CATORCENAL_COLS.puesto) ?? "").trim(),
+        salario,
+        bonificacion: 0,
+        bonificacionEspecial,
+        retroactivo: 0,
+        igss,
+        isr,
+        anticipo: 0,
+        otros,
+        totalIngresos,
+        totalDescuentos,
+        liquido: totalIngresos - totalDescuentos,
+      });
+    }
+
+    if (receipts.length === 0) {
+      throw new Error(`No se encontraron filas de datos válidas en hoja "${sheetName}"`);
+    }
+
+    return {
+      receipts,
+      companyName,
+      dateRange,
+      formatId: "catorcenal",
+      formatLabel: "Planilla IGSS catorcenal",
+      dataSheetName: sheetName,
+      warnings: [],
+    };
+  },
+};
+
+// ─── Dispatcher ──────────────────────────────────────────────────────────────
+
+const ADAPTERS: FormatAdapter[] = [catorcenalAdapter, mensualAdapter];
+
+/** Run each adapter's detect() in priority order and return the first match. */
+export function detectFormat(
+  wb: XLSX.WorkBook
+): { adapter: FormatAdapter; formatId: FormatId; formatLabel: string; sheet: string } | null {
+  for (const adapter of ADAPTERS) {
+    const det = adapter.detect(wb);
+    if (det.matched) {
+      return { adapter, formatId: adapter.id, formatLabel: adapter.label, sheet: det.sheet };
+    }
+  }
+  return null;
+}
+
+/**
+ * Parse a workbook.
+ *
+ * - Without `formatId`: auto-detect, throw if no adapter matches.
+ * - With `formatId`: use that adapter explicitly. `sheetName` overrides the
+ *   adapter's default sheet (used by the manual-fallback path).
+ */
+export function parseWorkbook(
+  wb: XLSX.WorkBook,
+  opts?: { formatId?: FormatId; sheetName?: string }
+): ParseResult {
+  if (opts?.formatId) {
+    const adapter = ADAPTERS.find((a) => a.id === opts.formatId);
+    if (!adapter) throw new Error(`Formato desconocido: ${opts.formatId}`);
+    let sheet = opts.sheetName;
+    if (!sheet) {
+      const det = adapter.detect(wb);
+      if (det.matched) sheet = det.sheet;
+    }
+    if (!sheet) {
+      throw new Error(
+        `No se encontró hoja de datos para formato ${adapter.label}. ` +
+        `Hojas disponibles: ${wb.SheetNames.join(", ")}`
+      );
+    }
+    return adapter.parse(wb, sheet);
   }
 
-  if (receipts.length === 0) {
-    throw new Error("No se encontraron filas de datos válidas");
+  const det = detectFormat(wb);
+  if (!det) {
+    throw new Error(
+      `Formato no reconocido. Hojas disponibles: ${wb.SheetNames.join(", ")}`
+    );
   }
-
-  return { receipts, companyName, dateRange: dateRangeRaw.trim(), warnings };
+  return det.adapter.parse(wb, det.sheet);
 }
 
 export function readWorkbookFromArrayBuffer(buffer: ArrayBuffer): XLSX.WorkBook {
